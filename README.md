@@ -34,10 +34,13 @@ Open `http://localhost:3000`. Key routes are:
 ```powershell
 npm run lint
 npm test
+npm run build:vercel
 ```
 
 `npm test` creates the production build, checks rendered routes, validates the
 hypertension lookup, and checks every public association partition.
+`npm run build:vercel` validates the standard Next.js build used by the public
+Vercel deployment; the existing `npm run build` command remains the Sites build.
 
 ## Aggregate data export
 
