@@ -108,6 +108,58 @@ export default function MethodsPage() {
           </p>
         </section>
 
+        <section className="evidence-section" aria-labelledby="curves-methods-title">
+          <div className="section-heading">
+            <div>
+              <span>Incidence PheDAS survival analysis</span>
+              <h2 id="curves-methods-title">Cumulative incidence, with death treated as competing</h2>
+            </div>
+            <p>The curves describe absolute observed incidence; they are not M4-adjusted hazard ratios.</p>
+          </div>
+          <div className="definition-grid">
+            <article>
+              <span>Estimator</span>
+              <h2>Aalen–Johansen curves</h2>
+              <p>
+                The curve view reports cumulative incidence from index through six
+                years while treating death as a competing event. It does not use
+                one minus Kaplan–Meier, which would overstate incidence when a
+                competing event is present.
+              </p>
+            </article>
+            <article>
+              <span>Outcome selection</span>
+              <h2>Post-selection description</h2>
+              <p>
+                Curves are available for the 40 PheCodes that were FDR-significant
+                in at least one M4 OSA-severity contrast, including one visibly
+                labeled OSA-recoding control. The curves describe those selected
+                outcomes; they are not independent confirmation.
+              </p>
+            </article>
+            <article>
+              <span>Recorded CPAP usage</span>
+              <h2>Descriptive, not a treatment effect</h2>
+              <p>
+                CPAP strata are observational and include only participants with
+                recorded usage. Missing usage is not a no-CPAP group. Confounding,
+                adherence selection, and exposure timing prevent causal treatment
+                interpretation; No OSA is repeated as a common external reference.
+              </p>
+            </article>
+          </div>
+          <p className="method-callout">
+            Exact monthly at-risk and cumulative-event cells, uncertainty bands,
+            and downloads are unavailable in this preview. Count arrays remain
+            outside the browser bundle pending an institution-approved primary and
+            complementary disclosure policy. Follow-up ends May 31, 2023, and late
+            curve tails may be supported by thinner risk sets.
+          </p>
+          <Link className="primary-link" href="/survival?code=401.1&amp;view=severity">
+            Explore cumulative incidence curves →
+          </Link>
+        </section>
+
         <section className="atlas-index" aria-labelledby="models-title">
           <div className="section-kicker">PheDAS adjustment ladder</div>
           <h2 id="models-title">Read disease-model M1 through M4 as a sequence</h2>

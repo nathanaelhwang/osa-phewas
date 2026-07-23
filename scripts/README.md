@@ -53,3 +53,33 @@ Aggregate count companions are joined where they already exist; the exporter
 does not reconstruct or infer missing exposure-by-outcome cells. LabWAS,
 MedWAS, and ProcWAS are marked as archived snapshots, BehWAS as preliminary
 archived results, and UtilWAS as archived results pending review.
+
+## Aggregate Incidence PheDAS curve export
+
+Export the plot-ready cumulative-incidence curves separately:
+
+```powershell
+python .\scripts\export_survival_data.py
+```
+
+The exporter reads only four fixed, allowlisted aggregate files in
+`results/incwas_results/survival_curves`: the source README, the FDR feature
+list, and the severity- and CPAP-stratified curve CSVs. It never reads
+`survival_long.parquet` and has no source-path option. Exact schemas, feature
+joins, group and panel labels, the monthly time grid, numeric ranges,
+monotonicity, source curve thresholds, and source hashes are validated before
+any website file is written.
+
+Outputs are:
+
+- `survival-manifest.json`, which records provenance, estimand and stratum
+  semantics, disclosure status, feature paths, and the default feature.
+- `survival/{phecode}.json`, one columnar severity and CPAP curve payload per
+  FDR-significant PheCode.
+
+Browser JSON contains only `time_years` and aggregate Aalen-Johansen
+`cif_pct` curve values. Exact feature-level and timepoint risk/event counts are
+validated internally but withheld pending institutional disclosure review.
+Risk tables and downloads therefore remain disabled. CPAP curves are
+descriptive, not causal; the shared No-OSA reference is stored once in the
+severity section and reused across CPAP severity panels.

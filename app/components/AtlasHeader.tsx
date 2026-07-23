@@ -11,6 +11,7 @@ export function AtlasHeader() {
         </Link>
         <nav className="site-nav" aria-label="Primary navigation">
           <Link href="/explore">Disease scans</Link>
+          <Link href="/survival">Incidence curves</Link>
           <Link href="/was">Other WAS</Link>
           <Link href="/feature?code=401.1">Feature lookup</Link>
           <Link href="/methods">Methods</Link>

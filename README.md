@@ -4,7 +4,9 @@ Research-facing explorer for aggregate associations between obstructive sleep
 apnea (OSA) severity and the clinical phenome. It includes Prevalence PheDAS,
 Incidence PheDAS, LabWAS, MedWAS, BehWAS, ProcWAS, and UtilWAS. Every
 non-disease family carries its archived, preliminary, or review status in the
-interface.
+interface. Incidence PheDAS also includes interactive Aalen–Johansen cumulative-
+incidence curves for its FDR-selected outcomes, stratified by OSA severity and
+recorded CPAP usage.
 
 The primary presentation is **M4 / Severe vs None**. “None” means AHI `<5`
 within the sleep-clinic referral cohort.
@@ -22,6 +24,7 @@ Open `http://localhost:3000`. Key routes are:
 
 - `/` — atlas overview and feature search
 - `/explore` — interactive Manhattan, volcano, and table views
+- `/survival` — cumulative-incidence curves by OSA severity or recorded CPAP usage
 - `/was` — estimand-separated laboratory, medication, behavior, procedure, and utilization scans
 - `/feature?code=401.1` — combined disease evidence for a PheCode, or a namespaced non-disease feature report
 - `/methods` — methods, interpretation, and release status
@@ -44,6 +47,7 @@ Regenerate the disease and non-disease payloads with:
 ```powershell
 python .\scripts\export_disease_data.py
 python .\scripts\export_multiwas_data.py
+python .\scripts\export_survival_data.py
 ```
 
 See [scripts/README.md](scripts/README.md) for the exporter contract. The
@@ -59,3 +63,5 @@ disclosure checks. A version-matched count companion and institution-approved
 suppression decision are required before publishing the data files or enabling
 downloads. Several other families also have only overall feature counts rather
 than the complete exposure-by-outcome cells, so the same release gate applies.
+The survival exporter validates monthly at-risk and event arrays internally but
+does not copy them into browser JSON while disclosure policy remains pending.

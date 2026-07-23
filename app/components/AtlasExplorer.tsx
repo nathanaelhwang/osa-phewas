@@ -263,6 +263,7 @@ export function AtlasExplorer({ initialState }: AtlasExplorerProps) {
             {selected.unstable ? <p className="quality-warning">Estimate flagged as unstable{selected.unstable_reason ? `: ${selected.unstable_reason}` : "."}</p> : null}
             {state.analysis === "incidence" && selected.ph_p !== null && selected.ph_p !== undefined && selected.ph_p < 0.05 ? <p className="quality-warning">Proportional-hazards diagnostic flagged (p {formatP(selected.ph_p)}).</p> : null}
             <Link className="primary-link" href={`/feature?code=${encodeURIComponent(selected.feature_id)}&contrast=${state.contrast}`}>Open full feature page →</Link>
+            {state.analysis === "incidence" && selected.sig_fdr ? <Link className="secondary-link" href={`/survival?code=${encodeURIComponent(selected.feature_id)}&view=severity`}>View cumulative-incidence curves →</Link> : null}
           </> : <p>Select a point or table row to inspect it.</p>}
         </aside>
       </div>

@@ -113,6 +113,39 @@ function publicDataPath(pathname) {
   return pathname.replaceAll("\\", "/").replace(/^\/?data\//, "");
 }
 
+function nestedKeys(value, keys = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => nestedKeys(item, keys));
+  } else if (value && typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      keys.push(key);
+      nestedKeys(item, keys);
+    }
+  }
+  return keys;
+}
+
+function assertMonotoneCurveColumns(columns, seriesFields, label) {
+  const previous = new Map();
+  const seen = new Set();
+  for (let index = 0; index < columns.time_years.length; index += 1) {
+    const series = seriesFields.map((field) => columns[field][index]).join("|");
+    const time = columns.time_years[index];
+    const cif = columns.cif_pct[index];
+    assert.ok(Number.isFinite(time) && time >= 0 && time <= 6, `${label}: invalid time`);
+    assert.ok(Number.isFinite(cif) && cif >= 0 && cif <= 100, `${label}: invalid CIF`);
+    const pointKey = `${series}|${time}`;
+    assert.equal(seen.has(pointKey), false, `${label}: duplicate series/time point`);
+    seen.add(pointKey);
+    const prior = previous.get(series);
+    if (prior) {
+      assert.ok(time >= prior.time, `${label}: time is not monotone for ${series}`);
+      assert.ok(cif + 1e-10 >= prior.cif, `${label}: CIF is not monotone for ${series}`);
+    }
+    previous.set(series, { time, cif });
+  }
+}
+
 test("server-renders the researcher-facing atlas home", async () => {
   const html = await render("/");
   const text = visibleText(html);
@@ -123,7 +156,57 @@ test("server-renders the researcher-facing atlas home", async () => {
   assert.match(text, /sleep-clinic referral cohort/i);
   assert.match(text, /do not estimate population OSA prevalence or establish causality/i);
   assert.match(text, /Search diseases, labs, medications, behaviors, procedures, and utilization/i);
+  assert.match(html, /href=["']\/survival\?code=401\.1&amp;view=severity["']/i);
   assertNoStarterPreview(html);
+});
+
+test("server-renders the cumulative-incidence explorer with a safe default", async () => {
+  const html = await render("/survival");
+  const text = visibleText(html);
+
+  assert.match(text, /Cumulative incidence after index/i);
+  assert.match(text, /Aalen[–-]Johansen/i);
+  assert.match(text, /death competing/i);
+  assert.match(text, /descriptive and unadjusted/i);
+  assert.match(text, /Count arrays remain outside the browser bundle pending disclosure review/i);
+  assertSelectedOption(html, "401.1");
+  assert.match(text, /Essential hypertension/i);
+  assert.match(html, /<button(?=[^>]*aria-pressed=["']true["'])[^>]*>OSA severity<\/button>/i);
+  assert.doesNotMatch(html, /<th[^>]*>\s*(?:At risk|Events)\s*<\/th>/i);
+  assertNoStarterPreview(html);
+});
+
+test("server-renders the CPAP curve state with its non-causal warning", async () => {
+  const html = await render("/survival?code=291.8&view=cpap");
+  const text = visibleText(html);
+
+  assertSelectedOption(html, "291.8");
+  assert.match(text, /Alteration of consciousness/i);
+  assert.match(html, /<button(?=[^>]*aria-pressed=["']true["'])[^>]*>Recorded CPAP usage<\/button>/i);
+  assert.match(text, /Descriptive CPAP strata[—-]not treatment effects/i);
+  assert.match(text, /missing usage is not a “no CPAP” group/i);
+  assert.match(text, /same No OSA reference curve is repeated in each panel/i);
+  assertNoStarterPreview(html);
+});
+
+test("server-renders the circular OSA-recoding control with an explicit warning", async () => {
+  const html = await render("/survival?code=327.3&view=severity");
+  const text = visibleText(html);
+
+  assertSelectedOption(html, "327.3");
+  assert.match(text, /Sleep apnea/i);
+  assert.match(text, /Methodological control/i);
+  assert.match(text, /circular OSA-recoding phenotype/i);
+  assert.match(text, /should not be interpreted as an incident disease finding/i);
+});
+
+test("server-normalizes unsafe curve query state without constructing a data path", async () => {
+  const html = await render("/survival?code=..%2Fnot-a-feature&view=invalid");
+  const text = visibleText(html);
+
+  assertSelectedOption(html, "401.1");
+  assert.match(html, /<button(?=[^>]*aria-pressed=["']true["'])[^>]*>OSA severity<\/button>/i);
+  assert.doesNotMatch(text, /\.\.\/not-a-feature/i);
 });
 
 test("server-renders explicit explorer query state and disclosure controls", async () => {
@@ -308,6 +391,129 @@ test("feature index has a stable, searchable hypertension record", async () => {
     .toLowerCase();
   assert.match(searchable, /hypertension/);
   assert.match(searchable, /401\.1/);
+});
+
+test("survival manifest and curve payloads are complete, monotone, and count-free", async () => {
+  const manifest = await readJson("survival-manifest.json");
+  const prohibitedKeys = new Set([
+    "n_atrisk",
+    "n_at_risk",
+    "n_events",
+    "n_events_cum",
+    "event_count",
+    "case_count",
+    "participant_count",
+  ]);
+
+  assert.equal(manifest.schema_version, 1);
+  assert.deepEqual(
+    { feature: manifest.defaults.feature_id, view: manifest.defaults.view },
+    { feature: "401.1", view: "severity" },
+  );
+  assert.equal(manifest.features.length, 40);
+  assert.equal(new Set(manifest.features.map((feature) => feature.feature_id)).size, 40);
+  assert.equal(new Set(manifest.features.map((feature) => feature.path)).size, 40);
+  assert.deepEqual(
+    manifest.features.filter((feature) => feature.osa_control).map((feature) => feature.feature_id),
+    ["327.3"],
+  );
+  assert.equal(manifest.disclosure.counts_disclosure_status, "withheld_pending_review");
+  assert.equal(manifest.disclosure.risk_table_available, false);
+  assert.equal(manifest.disclosure.downloads_enabled, false);
+  assert.equal(manifest.disclosure.public_release_allowed, false);
+  assert.equal(manifest.counts.feature_count, 40);
+
+  for (const feature of manifest.features) {
+    assert.match(feature.path, /^survival\/[0-9]+(?:\.[0-9]+)*\.json$/);
+    assert.doesNotMatch(feature.path, /^(?:[a-z]:[\\/]|[\\/]{1,2}|(?:https?|file):)/i);
+    assert.equal(feature.path.includes(".."), false);
+  }
+  const manifestText = JSON.stringify(manifest);
+  assert.doesNotMatch(manifestText, /survival_long|\.parquet|(?:[a-z]:\\)|(?:https?|file):\/\//i);
+  assert.deepEqual(
+    [...new Set(nestedKeys(manifest).filter((key) => prohibitedKeys.has(key)))],
+    [],
+  );
+
+  const loaded = [];
+  for (const feature of manifest.features) {
+    const payload = await readJson(feature.path);
+    loaded.push(payload);
+    assert.equal(payload.schema_version, 1);
+    assert.equal(payload.metadata.feature_id, feature.feature_id);
+    assert.equal(payload.metadata.feature_name, feature.feature_name);
+    assert.equal(payload.metadata.osa_control, feature.osa_control);
+    assert.equal(payload.metadata.counts_disclosure_status, "withheld_pending_review");
+    assert.equal(payload.metadata.risk_table_available, false);
+    assert.equal(payload.metadata.downloads_enabled, false);
+    assert.deepEqual(
+      Object.keys(payload.severity.columns).sort(),
+      ["cif_pct", "group", "time_years"],
+    );
+    assert.deepEqual(
+      Object.keys(payload.cpap.columns).sort(),
+      ["cif_pct", "group", "panel", "time_years"],
+    );
+    assertColumnLengths(
+      payload.severity.columns,
+      ["group", "time_years", "cif_pct"],
+      payload.severity.row_count,
+    );
+    assertColumnLengths(
+      payload.cpap.columns,
+      ["panel", "group", "time_years", "cif_pct"],
+      payload.cpap.row_count,
+    );
+    assertMonotoneCurveColumns(
+      payload.severity.columns,
+      ["group"],
+      `${feature.feature_id} severity`,
+    );
+    assertMonotoneCurveColumns(
+      payload.cpap.columns,
+      ["panel", "group"],
+      `${feature.feature_id} CPAP`,
+    );
+    assert.deepEqual(
+      [...new Set(payload.severity.columns.group)].sort(),
+      ["Mild", "Moderate", "No OSA", "Severe"],
+    );
+    assert.deepEqual(
+      [...new Set(payload.cpap.columns.panel)].sort(),
+      ["Mild", "Moderate", "Severe"],
+    );
+    assert.deepEqual(
+      [...new Set(payload.cpap.columns.group)].sort(),
+      ["2-4 hr/night", "4+ hr/night", "<2 hr/night"],
+    );
+    assert.equal(payload.cpap.columns.group.includes("No OSA"), false);
+    assert.equal(payload.strata.cpap_common_reference.group, "No OSA");
+    assert.ok(payload.severity.columns.group.includes("No OSA"));
+    assert.deepEqual(
+      [...new Set(nestedKeys(payload).filter((key) => prohibitedKeys.has(key)))],
+      [],
+      `${feature.feature_id} exposes a prohibited count key`,
+    );
+  }
+
+  const sparse = loaded.find((payload) => payload.metadata.feature_id === "291.8");
+  assert.ok(sparse, "missing PheCode 291.8 curve payload");
+  const suppliedPairs = [...new Set(sparse.cpap.columns.panel.map(
+    (panel, index) => `${panel}|${sparse.cpap.columns.group[index]}`,
+  ))].sort();
+  assert.deepEqual(suppliedPairs, [
+    "Mild|2-4 hr/night",
+    "Mild|4+ hr/night",
+    "Mild|<2 hr/night",
+    "Moderate|4+ hr/night",
+    "Moderate|<2 hr/night",
+    "Severe|4+ hr/night",
+    "Severe|<2 hr/night",
+  ].sort());
+  assert.deepEqual(
+    sparse.cpap.omitted_strata.map(({ panel, group }) => `${panel}|${group}`).sort(),
+    ["Moderate|2-4 hr/night", "Severe|2-4 hr/night"],
+  );
 });
 
 test("manifest defaults and every public association partition satisfy the schema", async () => {

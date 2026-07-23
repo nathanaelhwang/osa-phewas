@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = new URL(`${protocol}://${host}`).origin;
   const socialImage = new URL("/og.png", origin).toString();
   const description =
-    "Explore aggregate associations between obstructive sleep apnea severity and diseases, laboratory patterns, medications, behaviors, procedures, and healthcare use.";
+    "Explore aggregate associations and cumulative-incidence curves linking obstructive sleep apnea severity with diseases, laboratory patterns, medications, behaviors, procedures, and healthcare use.";
 
   return {
     title: {

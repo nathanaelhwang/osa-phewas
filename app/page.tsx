@@ -48,6 +48,14 @@ export default function Home() {
               <b aria-hidden="true">→</b>
             </Link>
           </div>
+          <div className="entry-followup">
+            <div>
+              <span className="section-kicker">Survival analysis</span>
+              <h3>Trace cumulative incidence after index</h3>
+              <p>Explore Aalen–Johansen curves for FDR-selected incident outcomes by OSA severity or recorded CPAP usage.</p>
+            </div>
+            <Link href="/survival?code=401.1&amp;view=severity">Explore incidence curves →</Link>
+          </div>
         </section>
 
         <section className="atlas-index page-shell" aria-labelledby="atlas-index-title">

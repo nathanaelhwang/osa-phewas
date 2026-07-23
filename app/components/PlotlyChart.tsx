@@ -8,6 +8,7 @@ type PlotlyChartProps = {
   ariaLabel: string;
   className?: string;
   onPointClick?: (point: Record<string, unknown>) => void;
+  allowImageExport?: boolean;
 };
 
 type PlotlyClickEvent = {
@@ -20,6 +21,7 @@ export function PlotlyChart({
   ariaLabel,
   className = "atlas-plot",
   onPointClick,
+  allowImageExport = true,
 }: PlotlyChartProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,7 +39,11 @@ export function PlotlyChart({
         responsive: true,
         displaylogo: false,
         scrollZoom: false,
-        modeBarButtonsToRemove: ["lasso2d", "select2d"],
+        modeBarButtonsToRemove: [
+          "lasso2d",
+          "select2d",
+          ...(allowImageExport ? [] : ["toImage"]),
+        ],
         toImageButtonOptions: { format: "svg", filename: "osa-association-atlas" },
       }).then(() => {
         node.removeAllListeners?.("plotly_click");
@@ -54,7 +60,7 @@ export function PlotlyChart({
       cancelled = true;
       node.removeAllListeners?.("plotly_click");
     };
-  }, [data, layout, onPointClick]);
+  }, [allowImageExport, data, layout, onPointClick]);
 
   return <div ref={ref} className={className} role="img" aria-label={ariaLabel} />;
 }
