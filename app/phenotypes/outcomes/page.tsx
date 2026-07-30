@@ -30,7 +30,7 @@ export default function PhenotypeOutcomesPage() {
           <div>
             <div className="section-kicker">Phenotype-exposure Incidence PheDAS</div>
             <h1>Outcome panels without the long scroll.</h1>
-            <p>Search by outcome, PheCode, body system, or focal octant. Each result keeps the unadjusted cumulative-incidence trajectory beside its adjusted M4 association and disclosure-aware annual risk table.</p>
+            <p>Search by outcome, PheCode, body system, or focal octant. Compare every disclosure-safe phenotype curve with the directly estimated full-cohort reference, or return to the selected one-vs-rest contrast.</p>
           </div>
           <dl>
             <div><dt>Panels</dt><dd>{outcomeData.survival.scope.panel_count}</dd><small>one-vs-rest M4 models</small></div>

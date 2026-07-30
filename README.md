@@ -8,7 +8,9 @@ interface. Incidence PheDAS also includes interactive Aalen–Johansen cumulativ
 incidence curves for its FDR-selected outcomes, stratified by OSA severity and
 landmark CPAP adherence designed to address immortal-time bias. A dedicated Phenotypes section
 describes eight cross-domain octants with 26 aggregate cluster measures and a
-searchable 168-panel phenotype-exposure survival explorer.
+searchable 168-panel phenotype-exposure survival explorer. Each selected
+outcome can compare every disclosure-safe octant curve with a directly
+estimated full-cohort reference or return to the focal-versus-rest contrast.
 
 The primary presentation is **M4 / Severe vs None**. “None” means AHI `<5`
 within the sleep-clinic referral cohort.
@@ -27,7 +29,7 @@ Open `http://localhost:3000`. Key routes are:
 - `/` — atlas overview and feature search
 - `/explore` — interactive Manhattan, volcano, and table views
 - `/phenotypes` — enriched octant profiles and cluster comparisons
-- `/phenotypes/outcomes` — searchable phenotype-exposure outcome panels and interactive curves
+- `/phenotypes/outcomes` — searchable outcome panels with all-phenotype and focal-versus-rest cumulative-incidence views
 - `/survival` — cumulative-incidence curves by OSA severity or landmark CPAP adherence
 - `/was` — estimand-separated laboratory, medication, behavior, procedure, and utilization scans
 - `/feature?code=401.1` — combined disease evidence for a PheCode, or a namespaced non-disease feature report
@@ -70,4 +72,6 @@ several WAS families, so the interface does not infer them or enable raw result
 downloads. The survival exporter validates monthly at-risk and event arrays
 internally but intentionally omits those count arrays from the OSA-severity and
 landmark-CPAP browser JSON. The separate octant export includes disclosure-
-controlled annual risk tables; exact counts below 11 are null, never zero.
+controlled annual risk tables; exact counts below 11 are null, never zero. The
+pooled reference withholds all cumulative-event totals to prevent complementary
+reconstruction of rare focal counts.

@@ -192,6 +192,30 @@ export type PhenotypeRiskRow = {
   suppressed: boolean;
 };
 
+export type PhenotypeOverallMetadata = {
+  n_at_risk_baseline: number;
+  total_events: null;
+  cif3_pct: number;
+  mean_followup_years: number;
+  n_at_risk_3yr: number;
+  pct_baseline_at_risk_3yr: number;
+  curve_status: "available";
+  suppressed: false;
+  event_counts_withheld: true;
+  event_count_withholding_reason: string;
+  event_definition: string;
+  estimator: string;
+  competing_event: string;
+  time_origin: string;
+};
+
+export type PhenotypeOverallCurve = {
+  curve_status: "available";
+  curve: PhenotypeCurveSeries;
+  risk_table: PhenotypeRiskRow[];
+  metadata: PhenotypeOverallMetadata;
+};
+
 type PhenotypeCurvePanelBase = {
   octant: string;
   risk_table: Record<"focal" | "other_seven", PhenotypeRiskRow[]>;
@@ -209,11 +233,12 @@ export type PhenotypeCurvePanel = PhenotypeCurvePanelBase & (
 );
 
 export type PhenotypeSurvivalOutcomePayload = {
-  schema_version: 1;
+  schema_version: 2;
   level: "phecode" | "system";
   outcome_id: string;
   outcome_name: string;
   category: string;
+  overall: PhenotypeOverallCurve;
   panels: PhenotypeCurvePanel[];
 };
 
@@ -236,14 +261,126 @@ function assertNumericSeries(value: unknown, context: string) {
   return value as number[];
 }
 
+function assertCurveSeries(value: unknown, context: string): PhenotypeCurveSeries {
+  if (!isRecord(value)) throw new Error(`${context} is missing.`);
+  const times = assertNumericSeries(value.time_years, `${context} times`);
+  const values = assertNumericSeries(value.cif_pct, `${context} cumulative incidence`);
+  if (
+    times[0] !== 0 ||
+    times.at(-1) !== 3 ||
+    times.some((time, index) => index > 0 && time <= times[index - 1]) ||
+    values.some((item) => item < 0 || item > 100) ||
+    values.some((item, index) => index > 0 && item + 1e-10 < values[index - 1])
+  ) {
+    throw new Error(`${context} contains values outside the released range.`);
+  }
+  return value as unknown as PhenotypeCurveSeries;
+}
+
+function assertRiskTable(value: unknown, context: string): PhenotypeRiskRow[] {
+  if (!Array.isArray(value) || value.length !== 4) {
+    throw new Error(`${context} is not a valid annual risk table.`);
+  }
+  const expectedTimes = [0, 1, 2, 3];
+  const rows = value.map((row, index) => {
+    if (
+      !isRecord(row) ||
+      row.time_years !== expectedTimes[index] ||
+      !Number.isInteger(row.n_at_risk) ||
+      (row.n_at_risk as number) < 11 ||
+      (row.n_events_cum !== null &&
+        (!Number.isInteger(row.n_events_cum) || (row.n_events_cum as number) < 11)) ||
+      typeof row.suppressed !== "boolean" ||
+      row.suppressed !== (row.n_events_cum === null)
+    ) {
+      throw new Error(`${context} contains an invalid or undisclosed count.`);
+    }
+    return row as unknown as PhenotypeRiskRow;
+  });
+  if (rows.some((row, index) => index > 0 && row.n_at_risk > rows[index - 1].n_at_risk)) {
+    throw new Error(`${context} contains an increasing risk set.`);
+  }
+  const disclosedEvents = rows.flatMap((row) =>
+    row.n_events_cum === null ? [] : [row.n_events_cum],
+  );
+  if (disclosedEvents.some((events, index) => index > 0 && events < disclosedEvents[index - 1])) {
+    throw new Error(`${context} contains a decreasing cumulative event count.`);
+  }
+  return rows;
+}
+
+function assertOverallCurve(value: unknown): PhenotypeOverallCurve {
+  if (!isRecord(value) || value.curve_status !== "available") {
+    throw new Error("The phenotype curve asset is missing the pooled-cohort curve.");
+  }
+  const curve = assertCurveSeries(value.curve, "Pooled-cohort curve");
+  const riskTable = assertRiskTable(value.risk_table, "Pooled-cohort risk table");
+  if (riskTable.some((row) => row.n_events_cum !== null || !row.suppressed)) {
+    throw new Error("Pooled-cohort event counts are not complementarily suppressed.");
+  }
+  const metadata = value.metadata;
+  if (!isRecord(metadata)) {
+    throw new Error("The pooled-cohort curve is missing metadata.");
+  }
+  const numericFields = [
+    "n_at_risk_baseline",
+    "cif3_pct",
+    "mean_followup_years",
+    "n_at_risk_3yr",
+    "pct_baseline_at_risk_3yr",
+  ] as const;
+  const textFields = ["event_definition", "estimator", "competing_event", "time_origin"] as const;
+  if (
+    numericFields.some(
+      (field) => typeof metadata[field] !== "number" || !Number.isFinite(metadata[field]),
+    ) ||
+    textFields.some((field) => typeof metadata[field] !== "string" || !metadata[field]) ||
+    metadata.curve_status !== "available" ||
+    metadata.suppressed !== false ||
+    metadata.total_events !== null ||
+    metadata.event_counts_withheld !== true ||
+    metadata.event_count_withholding_reason !==
+      "Complementary suppression prevents reconstruction of rare focal event counts." ||
+    !Number.isInteger(metadata.n_at_risk_baseline) ||
+    !Number.isInteger(metadata.n_at_risk_3yr) ||
+    (metadata.n_at_risk_baseline as number) < 11 ||
+    (metadata.n_at_risk_3yr as number) < 11 ||
+    (metadata.n_at_risk_3yr as number) > (metadata.n_at_risk_baseline as number) ||
+    (metadata.cif3_pct as number) < 0 ||
+    (metadata.cif3_pct as number) > 100 ||
+    (metadata.mean_followup_years as number) < 0 ||
+    (metadata.mean_followup_years as number) > 3 ||
+    (metadata.pct_baseline_at_risk_3yr as number) < 0 ||
+    (metadata.pct_baseline_at_risk_3yr as number) > 100
+  ) {
+    throw new Error("The pooled-cohort curve metadata are invalid.");
+  }
+  if (
+    Math.abs(curve.cif_pct.at(-1)! - (metadata.cif3_pct as number)) > 0.0001 ||
+    riskTable[0].n_at_risk !== metadata.n_at_risk_baseline ||
+    riskTable.at(-1)!.n_at_risk !== metadata.n_at_risk_3yr
+  ) {
+    throw new Error("The pooled-cohort curve does not reconcile with its metadata.");
+  }
+  return value as unknown as PhenotypeOverallCurve;
+}
+
 function validateCurvePayload(
   value: unknown,
   expected: OctantSurvivalOutcome,
   expectedLevel: OctantSurvivalLevel["id"],
 ): PhenotypeSurvivalOutcomePayload {
-  if (!isRecord(value) || value.schema_version !== 1 || value.level !== expectedLevel || value.outcome_id !== expected.outcome_id) {
+  if (
+    !isRecord(value) ||
+    value.schema_version !== 2 ||
+    value.level !== expectedLevel ||
+    value.outcome_id !== expected.outcome_id ||
+    value.outcome_name !== expected.outcome_name ||
+    value.category !== expected.category
+  ) {
     throw new Error("The phenotype curve asset does not match the selected outcome.");
   }
+  assertOverallCurve(value.overall);
   if (!Array.isArray(value.panels) || value.panels.length !== 8) {
     throw new Error("The phenotype curve asset does not contain all eight octants.");
   }
@@ -258,10 +395,7 @@ function validateCurvePayload(
       throw new Error("The phenotype curve asset is missing an annual risk table.");
     }
     for (const group of ["focal", "other_seven"] as const) {
-      const rows = rawPanel.risk_table[group];
-      if (!Array.isArray(rows) || rows.length !== 4) {
-        throw new Error("The phenotype curve asset has an invalid annual risk table.");
-      }
+      assertRiskTable(rawPanel.risk_table[group], "Phenotype-panel risk table");
     }
     if (rawPanel.curve_status === "withheld_event_count_suppression") {
       if (rawPanel.curves !== null) throw new Error("A withheld phenotype curve unexpectedly contains coordinates.");
@@ -272,12 +406,7 @@ function validateCurvePayload(
     }
     for (const group of ["focal", "other_seven"] as const) {
       const series = rawPanel.curves[group];
-      if (!isRecord(series)) throw new Error("The phenotype curve asset is missing a curve series.");
-      const times = assertNumericSeries(series.time_years, "Curve times");
-      const values = assertNumericSeries(series.cif_pct, "Cumulative incidence");
-      if (times[0] !== 0 || times.at(-1) !== 3 || values.some((item) => item < 0 || item > 100)) {
-        throw new Error("The phenotype curve asset contains values outside the released range.");
-      }
+      assertCurveSeries(series, "Phenotype-panel curve");
     }
   }
   return value as unknown as PhenotypeSurvivalOutcomePayload;

@@ -23,10 +23,13 @@ from typing import Any
 
 
 SCHEMA_VERSION = 2
-CURVE_SCHEMA_VERSION = 1
-EXPORTER_VERSION = "2.0.0"
+CURVE_SCHEMA_VERSION = 2
+EXPORTER_VERSION = "2.1.0"
 RELEASE_ID = "2026-07-29"
 DISCLOSURE_THRESHOLD = 11
+EVENT_COUNT_WITHHOLDING_REASON = (
+    "Complementary suppression prevents reconstruction of rare focal event counts."
+)
 
 WEBSITE_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = WEBSITE_ROOT.parent
@@ -134,9 +137,25 @@ CSV_FIELDS = {
         "level", "outcome", "octant", "group", "time_years", "n_at_risk",
         "n_events_cum", "suppressed",
     },
+    "octant_cif_overall_curves.csv": {
+        "level", "outcome", "outcome_name", "category", "group",
+        "time_years", "cif_pct", "curve_status", "suppressed",
+    },
+    "octant_cif_overall_risk_table.csv": {
+        "level", "outcome", "outcome_name", "category", "group",
+        "time_years", "n_at_risk", "n_events_cum", "suppressed",
+    },
+    "octant_cif_overall_metadata.csv": {
+        "level", "outcome", "outcome_name", "category",
+        "n_at_risk_baseline", "total_events", "cif3_pct",
+        "mean_followup_years", "n_at_risk_3yr",
+        "pct_baseline_at_risk_3yr", "curve_status", "suppressed",
+        "event_definition", "estimator", "competing_event", "time_origin",
+    },
 }
 
 PUBLIC_EXPORT_FILES = tuple(CSV_FIELDS)
+OVERALL_AUDIT_FILE = "octant_cif_overall_audit.json"
 
 IMAGE_SOURCES = {
     "construction": (
@@ -250,6 +269,84 @@ def boolean(value: str, context: str) -> bool:
     raise ExportValidationError(f"{context}: expected True or False")
 
 
+def validate_overall_manifest(
+    manifest: dict[str, Any], inventory: dict[str, dict[str, Any]]
+) -> None:
+    overall = manifest.get("overall_exports")
+    if not isinstance(overall, dict):
+        raise ExportValidationError("export manifest: overall export approval missing")
+    expected_inventory = {
+        "octant_cif_overall_curves.csv": (2_520, 120),
+        "octant_cif_overall_risk_table.csv": (84, None),
+        "octant_cif_overall_metadata.csv": (21, None),
+    }
+    declared = {
+        "octant_cif_overall_curves.csv": overall.get("curves"),
+        "octant_cif_overall_risk_table.csv": overall.get("risk_table"),
+        "octant_cif_overall_metadata.csv": overall.get("metadata"),
+    }
+    for file_name, (expected_rows, expected_points) in expected_inventory.items():
+        entry = declared[file_name]
+        if (
+            not isinstance(entry, dict)
+            or entry.get("file") != file_name
+            or entry.get("rows") != expected_rows
+        ):
+            raise ExportValidationError(f"export manifest: invalid approval for {file_name}")
+        if expected_points is not None and entry.get("points_per_curve") != expected_points:
+            raise ExportValidationError("export manifest: invalid overall curve grid approval")
+    risk_approval = overall.get("risk_table")
+    if not isinstance(risk_approval, dict) or risk_approval.get("times_years") != [0.0, 1.0, 2.0, 3.0]:
+        raise ExportValidationError("export manifest: invalid overall risk-table grid approval")
+    if (
+        overall.get("group") != "all"
+        or overall.get("outcomes") != 21
+        or overall.get("direct_estimation_confirmed") is not True
+        or overall.get("raw_partition_reconciled") is not True
+        or overall.get("permutation_invariant") is not True
+        or overall.get("risk_counts_permutation_invariant") is not True
+        or overall.get("existing_focal_curves_unchanged") is not True
+        or overall.get("curves_are_adjusted") is not False
+        or overall.get("competing_event") != "death"
+    ):
+        raise ExportValidationError("export manifest: overall direct-estimation approval did not pass")
+
+    audit_name = overall.get("audit")
+    audit_entry = inventory.get(OVERALL_AUDIT_FILE)
+    audit_path = allowlisted_path(
+        EXPORT_ROOT / OVERALL_AUDIT_FILE, EXPORT_ROOT, OVERALL_AUDIT_FILE
+    )
+    if (
+        audit_name != OVERALL_AUDIT_FILE
+        or audit_entry is None
+        or audit_entry.get("internal") is not False
+        or audit_entry.get("bytes") != audit_path.stat().st_size
+        or audit_entry.get("sha256") != sha256(audit_path)
+    ):
+        raise ExportValidationError("overall audit: manifest integrity mismatch")
+    audit = read_json(audit_path, EXPORT_ROOT, "overall export audit")
+    audit_validation = audit.get("validation")
+    direct_estimation = audit.get("direct_estimation")
+    checks = audit_validation.get("checks") if isinstance(audit_validation, dict) else None
+    direct_check_passed = isinstance(checks, list) and any(
+        isinstance(check, dict)
+        and check.get("check") == 28
+        and check.get("status") == "PASS"
+        for check in checks
+    )
+    if (
+        not isinstance(audit_validation, dict)
+        or audit_validation.get("status") != "PASS"
+        or audit_validation.get("n_failed") != 0
+        or not direct_check_passed
+        or not isinstance(direct_estimation, dict)
+        or direct_estimation.get("group") != "all"
+        or direct_estimation.get("confirmed") is not True
+        or direct_estimation.get("raw_partition_reconciled") is not True
+    ):
+        raise ExportValidationError("overall audit: direct-estimation validation did not pass")
+
+
 def validate_manifest() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     manifest_path = EXPORT_ROOT / "phenotype_website_export_manifest.json"
     manifest = read_json(manifest_path, EXPORT_ROOT, "export manifest")
@@ -271,6 +368,7 @@ def validate_manifest() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
             raise ExportValidationError(f"{file_name}: not approved as a public aggregate")
         if entry.get("bytes") != path.stat().st_size or entry.get("sha256") != sha256(path):
             raise ExportValidationError(f"{file_name}: manifest integrity mismatch")
+    validate_overall_manifest(manifest, by_name)
     return manifest, by_name
 
 
@@ -531,8 +629,229 @@ def safe_slug(value: str) -> str:
     return slug
 
 
-def load_curve_assets(
+def load_overall_assets(
     inventory: dict[str, dict[str, Any]], metadata: list[dict[str, Any]]
+) -> dict[tuple[str, str], dict[str, Any]]:
+    curve_rows = read_csv("octant_cif_overall_curves.csv")
+    risk_rows = read_csv("octant_cif_overall_risk_table.csv")
+    metadata_rows = read_csv("octant_cif_overall_metadata.csv")
+    for file_name, rows, expected_count in (
+        ("octant_cif_overall_curves.csv", curve_rows, 2_520),
+        ("octant_cif_overall_risk_table.csv", risk_rows, 84),
+        ("octant_cif_overall_metadata.csv", metadata_rows, 21),
+    ):
+        validate_row_count(file_name, rows, inventory)
+        if len(rows) != expected_count:
+            raise ExportValidationError(f"{file_name}: unexpected row count")
+
+    panels_by_outcome: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for panel in metadata:
+        panels_by_outcome[(panel["level"], panel["outcome_id"])].append(panel)
+    if len(panels_by_outcome) != 21:
+        raise ExportValidationError("overall assets: expected 21 outcome keys")
+    expected_identity: dict[tuple[str, str], tuple[str, str, str]] = {}
+    for key, panels in panels_by_outcome.items():
+        if len(panels) != 8 or {panel["octant"] for panel in panels} != set(OCTANT_ORDER):
+            raise ExportValidationError(f"overall assets: incomplete octant panels for {key}")
+        identities = {
+            (panel["outcome_name"], panel["category"], panel["event_definition"])
+            for panel in panels
+        }
+        if len(identities) != 1:
+            raise ExportValidationError(f"overall assets: inconsistent outcome metadata for {key}")
+        expected_identity[key] = next(iter(identities))
+
+    overall_metadata: dict[tuple[str, str], dict[str, Any]] = {}
+    for row_number, row in enumerate(metadata_rows, start=2):
+        context = f"overall metadata row {row_number}"
+        key = (row["level"], row["outcome"])
+        if key not in expected_identity or key in overall_metadata:
+            raise ExportValidationError(f"{context}: unexpected or duplicate outcome key")
+        outcome_name, category, event_definition = expected_identity[key]
+        if (
+            row["outcome_name"] != outcome_name
+            or row["category"] != category
+            or row["event_definition"] != event_definition
+        ):
+            raise ExportValidationError(f"{context}: outcome identity differs from panel metadata")
+        suppressed = boolean(row["suppressed"], f"{context} suppressed")
+        counts = {
+            "n_at_risk_baseline": nullable_whole(
+                row["n_at_risk_baseline"], f"{context} n_at_risk_baseline"
+            ),
+            "total_events": nullable_whole(row["total_events"], f"{context} total_events"),
+            "n_at_risk_3yr": nullable_whole(
+                row["n_at_risk_3yr"], f"{context} n_at_risk_3yr"
+            ),
+        }
+        if (
+            row["curve_status"] != "available"
+            or suppressed
+            or any(count is None for count in counts.values())
+        ):
+            raise ExportValidationError(f"{context}: pooled curve is not approved as available")
+        if any(count < DISCLOSURE_THRESHOLD for count in counts.values() if count is not None):
+            raise ExportValidationError(f"{context}: unsuppressed small count")
+        baseline = counts["n_at_risk_baseline"]
+        total_events = counts["total_events"]
+        at_risk_3yr = counts["n_at_risk_3yr"]
+        assert baseline is not None and total_events is not None and at_risk_3yr is not None
+        if total_events > baseline or at_risk_3yr > baseline:
+            raise ExportValidationError(f"{context}: count exceeds the baseline risk set")
+        cif3 = finite(row["cif3_pct"], f"{context} cif3_pct")
+        mean_followup = finite(row["mean_followup_years"], f"{context} mean follow-up")
+        pct_at_risk = finite(
+            row["pct_baseline_at_risk_3yr"], f"{context} pct_baseline_at_risk_3yr"
+        )
+        if not 0 <= cif3 <= 100 or not 0 <= mean_followup <= 3 or not 0 <= pct_at_risk <= 100:
+            raise ExportValidationError(f"{context}: value outside the approved range")
+        if not math.isclose(100 * at_risk_3yr / baseline, pct_at_risk, abs_tol=0.00005):
+            raise ExportValidationError(f"{context}: 3-year at-risk percentage does not reconcile")
+        if (
+            "Aalen-Johansen" not in row["estimator"]
+            or row["competing_event"] != "death"
+            or not row["time_origin"]
+        ):
+            raise ExportValidationError(f"{context}: unexpected estimator definition")
+        overall_metadata[key] = {
+            "n_at_risk_baseline": baseline,
+            "total_events": None,
+            "cif3_pct": cif3,
+            "mean_followup_years": mean_followup,
+            "n_at_risk_3yr": at_risk_3yr,
+            "pct_baseline_at_risk_3yr": pct_at_risk,
+            "curve_status": "available",
+            "suppressed": False,
+            "event_counts_withheld": True,
+            "event_count_withholding_reason": EVENT_COUNT_WITHHOLDING_REASON,
+            "event_definition": row["event_definition"],
+            "estimator": row["estimator"],
+            "competing_event": row["competing_event"],
+            "time_origin": row["time_origin"],
+        }
+    if set(overall_metadata) != set(expected_identity):
+        raise ExportValidationError("overall metadata: outcome keys do not match panel metadata")
+
+    grouped_curves: dict[tuple[str, str], list[tuple[float, float]]] = defaultdict(list)
+    for row_number, row in enumerate(curve_rows, start=2):
+        context = f"overall curve row {row_number}"
+        key = (row["level"], row["outcome"])
+        if key not in expected_identity:
+            raise ExportValidationError(f"{context}: unexpected outcome key")
+        outcome_name, category, _ = expected_identity[key]
+        if row["outcome_name"] != outcome_name or row["category"] != category:
+            raise ExportValidationError(f"{context}: outcome identity differs from panel metadata")
+        if (
+            row["group"] != "all"
+            or row["curve_status"] != "available"
+            or boolean(row["suppressed"], f"{context} suppressed")
+        ):
+            raise ExportValidationError(f"{context}: pooled curve is not approved as available")
+        grouped_curves[key].append(
+            (finite(row["time_years"], context), finite(row["cif_pct"], context))
+        )
+    if set(grouped_curves) != set(expected_identity):
+        raise ExportValidationError("overall curves: outcome keys do not match panel metadata")
+
+    curves: dict[tuple[str, str], dict[str, list[float]]] = {}
+    reference_times: list[float] | None = None
+    for key, points in grouped_curves.items():
+        points.sort(key=lambda point: point[0])
+        times = [point[0] for point in points]
+        values = [point[1] for point in points]
+        if (
+            len(points) != 120
+            or not math.isclose(times[0], 0)
+            or not math.isclose(times[-1], 3)
+            or any(right <= left for left, right in zip(times, times[1:]))
+        ):
+            raise ExportValidationError(f"overall curve {key}: invalid 120-point time grid")
+        if reference_times is None:
+            reference_times = times
+        elif times != reference_times:
+            raise ExportValidationError(f"overall curve {key}: time grid differs across outcomes")
+        if (
+            not math.isclose(values[0], 0, abs_tol=1e-12)
+            or any(value < 0 or value > 100 for value in values)
+            or any(right + 1e-10 < left for left, right in zip(values, values[1:]))
+        ):
+            raise ExportValidationError(f"overall curve {key}: cumulative incidence is invalid")
+        if not math.isclose(
+            values[-1], overall_metadata[key]["cif3_pct"], abs_tol=0.0001
+        ):
+            raise ExportValidationError(f"overall curve {key}: endpoint differs from metadata")
+        curves[key] = {"time_years": times, "cif_pct": values}
+
+    grouped_risk: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row_number, row in enumerate(risk_rows, start=2):
+        context = f"overall risk row {row_number}"
+        key = (row["level"], row["outcome"])
+        if key not in expected_identity:
+            raise ExportValidationError(f"{context}: unexpected outcome key")
+        outcome_name, category, _ = expected_identity[key]
+        if row["outcome_name"] != outcome_name or row["category"] != category or row["group"] != "all":
+            raise ExportValidationError(f"{context}: invalid pooled risk-table identity")
+        n_at_risk = nullable_whole(row["n_at_risk"], f"{context} n_at_risk")
+        n_events = nullable_whole(row["n_events_cum"], f"{context} n_events_cum")
+        suppressed = boolean(row["suppressed"], f"{context} suppressed")
+        if suppressed != (n_at_risk is None or n_events is None):
+            raise ExportValidationError(f"{context}: suppression flag mismatch")
+        for count in (n_at_risk, n_events):
+            if count is not None and count < DISCLOSURE_THRESHOLD:
+                raise ExportValidationError(f"{context}: unsuppressed small count")
+        if n_at_risk is None:
+            raise ExportValidationError(f"{context}: at-risk count is unavailable")
+        grouped_risk[key].append(
+            {
+                "time_years": finite(row["time_years"], context),
+                "n_at_risk": n_at_risk,
+                "n_events_cum": n_events,
+                "suppressed": suppressed,
+            }
+        )
+    if set(grouped_risk) != set(expected_identity):
+        raise ExportValidationError("overall risk tables: outcome keys do not match panel metadata")
+
+    for key, rows in grouped_risk.items():
+        rows.sort(key=lambda row: row["time_years"])
+        if [row["time_years"] for row in rows] != [0.0, 1.0, 2.0, 3.0]:
+            raise ExportValidationError(f"overall risk table {key}: unexpected time points")
+        risks = [row["n_at_risk"] for row in rows]
+        if any(right > left for left, right in zip(risks, risks[1:])):
+            raise ExportValidationError(f"overall risk table {key}: risk set increases")
+        disclosed_events = [
+            row["n_events_cum"] for row in rows if row["n_events_cum"] is not None
+        ]
+        if any(right < left for left, right in zip(disclosed_events, disclosed_events[1:])):
+            raise ExportValidationError(f"overall risk table {key}: event count decreases")
+        if (
+            risks[0] != overall_metadata[key]["n_at_risk_baseline"]
+            or risks[-1] != overall_metadata[key]["n_at_risk_3yr"]
+        ):
+            raise ExportValidationError(f"overall risk table {key}: endpoints differ from metadata")
+
+    return {
+        key: {
+            "curve_status": "available",
+            "curve": curves[key],
+            "risk_table": [
+                {
+                    **row,
+                    "n_events_cum": None,
+                    "suppressed": True,
+                }
+                for row in grouped_risk[key]
+            ],
+            "metadata": overall_metadata[key],
+        }
+        for key in expected_identity
+    }
+
+
+def load_curve_assets(
+    inventory: dict[str, dict[str, Any]],
+    metadata: list[dict[str, Any]],
+    overall_assets: dict[tuple[str, str], dict[str, Any]],
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], int]:
     curve_rows = read_csv("octant_cif_curves.csv")
     risk_rows = read_csv("octant_cif_risk_table.csv")
@@ -610,6 +929,8 @@ def load_curve_assets(
     panels_by_outcome: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in metadata:
         panels_by_outcome[(row["level"], row["outcome_id"])].append(row)
+    if set(overall_assets) != set(panels_by_outcome):
+        raise ExportValidationError("overall assets: outcome keys do not match curve panels")
     assets: dict[tuple[str, str], dict[str, Any]] = {}
     paths: set[str] = set()
     withheld = 0
@@ -665,6 +986,7 @@ def load_curve_assets(
                 "outcome_id": outcome,
                 "outcome_name": first["outcome_name"],
                 "category": first["category"],
+                "overall": overall_assets[outcome_key],
                 "panels": asset_panels,
             },
         }
@@ -720,7 +1042,8 @@ def build() -> tuple[dict[str, Any], dict[tuple[str, str], dict[str, Any]]]:
     manifest, inventory = validate_manifest()
     octants, cut_points, metrics, correlations = load_clusters(inventory)
     metadata = load_metadata(inventory)
-    curve_assets, withheld = load_curve_assets(inventory, metadata)
+    overall_assets = load_overall_assets(inventory, metadata)
+    curve_assets, withheld = load_curve_assets(inventory, metadata, overall_assets)
     images = image_records()
 
     levels: list[dict[str, Any]] = []

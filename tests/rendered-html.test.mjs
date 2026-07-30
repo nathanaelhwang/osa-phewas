@@ -242,6 +242,10 @@ test("server-renders the dedicated phenotype outcome subpage", async () => {
   assert.match(text, /Search outcomes/i);
   assert.match(text, /120 of 120 panels/i);
   assert.match(text, /0\.05\/15/i);
+  assert.match(text, /All phenotypes/i);
+  assert.match(text, /Focal vs other seven/i);
+  assert.match(text, /directly estimated full cohort/i);
+  assert.match(text, /pooled event counts are withheld/i);
   assert.match(text, /Curve: unadjusted Aalen–Johansen cumulative incidence/i);
   assert.match(text, /Thin 3-year tail/i);
   assert.match(text, /PH diagnostic · not evaluated/i);
@@ -646,16 +650,64 @@ test("phenotype release contains enriched clusters and disclosure-safe interacti
   let unstablePanels = 0;
   let fdrPanels = 0;
   let bonferroniPanels = 0;
+  let overallCurvePoints = 0;
+  let overallRiskRows = 0;
+  const serializedAssets = [];
   for (const level of phenotype.survival.levels) {
     for (const outcome of level.outcomes) {
       assert.match(outcome.asset_path, new RegExp(`^data/phenotype-survival/${level.id}/[a-z0-9-]+\\.json$`));
       assetPaths.push(outcome.asset_path);
       assert.equal(outcome.panels.length, 8);
       const asset = await readJson(outcome.asset_path.replace(/^data\//, ""));
-      assert.equal(asset.schema_version, 1);
+      serializedAssets.push(JSON.stringify(asset));
+      assert.equal(asset.schema_version, 2);
       assert.equal(asset.level, level.id);
       assert.equal(asset.outcome_id, outcome.outcome_id);
+      assert.equal(asset.outcome_name, outcome.outcome_name);
+      assert.equal(asset.category, outcome.category);
       assert.equal(asset.panels.length, 8);
+
+      assert.equal(asset.overall.curve_status, "available");
+      assert.equal(asset.overall.metadata.curve_status, "available");
+      assert.equal(asset.overall.metadata.suppressed, false);
+      assert.equal(asset.overall.metadata.competing_event, "death");
+      assert.match(asset.overall.metadata.estimator, /Aalen-Johansen/i);
+      assert.ok(asset.overall.metadata.n_at_risk_baseline >= 11);
+      assert.equal(asset.overall.metadata.total_events, null);
+      assert.equal(asset.overall.metadata.event_counts_withheld, true);
+      assert.match(asset.overall.metadata.event_count_withholding_reason, /complement/i);
+      assert.ok(asset.overall.metadata.n_at_risk_3yr >= 11);
+      assert.ok(asset.overall.metadata.mean_followup_years > 0 && asset.overall.metadata.mean_followup_years <= 3);
+      assert.ok(asset.overall.metadata.pct_baseline_at_risk_3yr > 0 && asset.overall.metadata.pct_baseline_at_risk_3yr <= 100);
+
+      const overallSeries = asset.overall.curve;
+      assert.equal(overallSeries.time_years.length, 120);
+      assert.equal(overallSeries.cif_pct.length, 120);
+      assert.equal(overallSeries.time_years[0], 0);
+      assert.equal(overallSeries.time_years.at(-1), 3);
+      assert.ok(overallSeries.time_years.every((value, index, values) => index === 0 || value > values[index - 1]));
+      assert.ok(overallSeries.cif_pct.every((value) => value >= 0 && value <= 100));
+      assert.ok(overallSeries.cif_pct.every((value, index, values) => index === 0 || value >= values[index - 1] - 1e-10));
+      assert.ok(Math.abs(overallSeries.cif_pct.at(-1) - asset.overall.metadata.cif3_pct) <= 0.0001);
+      assert.equal("ci_low_pct" in overallSeries, false);
+      assert.equal("ci_high_pct" in overallSeries, false);
+      overallCurvePoints += overallSeries.time_years.length;
+
+      const overallRisk = asset.overall.risk_table;
+      assert.deepEqual(overallRisk.map((row) => row.time_years), [0, 1, 2, 3]);
+      assert.ok(overallRisk.every((row) => row.n_at_risk >= 11));
+      assert.ok(overallRisk.every((row) => row.suppressed === (row.n_events_cum === null)));
+      assert.ok(overallRisk.every((row) => row.n_events_cum === null && row.suppressed));
+      assert.ok(overallRisk.every((row, index, rows) => index === 0 || row.n_at_risk <= rows[index - 1].n_at_risk));
+      const disclosedOverallEvents = overallRisk.flatMap((row) => row.n_events_cum === null ? [] : [row.n_events_cum]);
+      assert.equal(disclosedOverallEvents.length, 0);
+      assert.equal(overallRisk[0].n_at_risk, asset.overall.metadata.n_at_risk_baseline);
+      assert.equal(overallRisk.at(-1).n_at_risk, asset.overall.metadata.n_at_risk_3yr);
+      assert.ok(Math.abs(
+        100 * asset.overall.metadata.n_at_risk_3yr / asset.overall.metadata.n_at_risk_baseline
+          - asset.overall.metadata.pct_baseline_at_risk_3yr,
+      ) <= 0.0001);
+      overallRiskRows += overallRisk.length;
 
       for (const panel of outcome.panels) {
         assert.equal(panel.ph_p, null);
@@ -711,8 +763,10 @@ test("phenotype release contains enriched clusters and disclosure-safe interacti
   assert.equal(unstablePanels, 80);
   assert.equal(fdrPanels, 31);
   assert.equal(bonferroniPanels, 21);
+  assert.equal(overallCurvePoints, 2_520);
+  assert.equal(overallRiskRows, 84);
   assert.doesNotMatch(
-    serialized,
+    `${serialized}${serializedAssets.join("")}`,
     /octant_assignments|cross_domain_phenotypes|(?:[a-z]:\\)|(?:https?|file):\/\/|\bmrn\b/i,
   );
 });
