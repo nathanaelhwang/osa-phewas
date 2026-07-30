@@ -87,17 +87,25 @@ and vulnerable to healthy-adherer confounding.
 
 ## Aggregate octant-phenotype export
 
-Export the public phenotype summary, publication figures, and structured
-three-year survival summaries with:
+Export the public phenotype summary, expanded cluster distributions, M4 model
+index, and disclosure-controlled three-year curve assets with:
 
 ```powershell
 python .\scripts\export_phenotype_data.py
 ```
 
-The exporter reads only fixed aggregate summaries and four publication PNGs.
-It intentionally has no source entry for the patient-level phenotype assignment
-or cross-domain phenotype files. Outputs are `public/data/phenotypes.json` and
-four images under `public/images/phenotypes/`. The octant survival source does
-not include an aggregate monthly time series, so the website presents the
-validated figures alongside interactive three-year summary records rather than
-reconstructing curves from patient-level data.
+The exporter reads only the validated `website_exports` aggregate package and
+four fixed publication PNGs. It intentionally has no source entry for the
+patient-level phenotype assignment or cross-domain phenotype files. Outputs are:
+
+- `public/data/phenotypes.json`, containing eight octants, 26 measures, and all
+  168 M4 one-vs-rest panel records;
+- `public/data/phenotype-survival/{level}/{outcome}.json`, 21 lazy-loaded outcome
+  assets with tie-aware Aalen–Johansen coordinates and annual risk tables; and
+- four images under `public/images/phenotypes/` for supplemental publication context.
+
+Exact counts below 11 are emitted as `null`, never zero. Curve coordinates are
+withheld for the 16 panels whose focal event count is suppressed; their model
+metadata and disclosure-safe annual at-risk values remain searchable. Internal
+audit CSVs are validated through the source manifest but are never copied into
+the public bundle.

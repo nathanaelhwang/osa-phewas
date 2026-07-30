@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const dataRoot = new URL("../public/data/", import.meta.url);
-const publicRoot = new URL("../public/", import.meta.url);
 let workerPromise;
 
 async function getWorker() {
@@ -192,7 +191,7 @@ test("server-renders the landmark CPAP state with immortal-time and confounding 
   assertNoStarterPreview(html);
 });
 
-test("server-renders the octant phenotype explorer and survival summaries", async () => {
+test("server-renders the enriched octant phenotype and survival explorers", async () => {
   const html = await render("/phenotypes");
   const text = visibleText(html);
 
@@ -203,22 +202,32 @@ test("server-renders the octant phenotype explorer and survival summaries", asyn
   assert.match(text, /Symptom burden/i);
   assert.match(text, /Comorbidity burden/i);
   assert.match(text, /Mild All/i);
-  assert.match(text, /All 17 measures/i);
+  assert.match(text, /26 of 26 measures/i);
+  assert.match(text, /Find a measure/i);
+  assert.match(html, /placeholder=["']Try hypertension, BMI, or sleepiness["']/i);
   assert.match(text, /FOSQ impairment/i);
   assert.match(text, /Hyperlipidemia/i);
   assert.match(text, /Impaired fasting glucose/i);
+  assert.match(text, /IncWAS follow-up/i);
+  assert.match(text, /Coverage/i);
   assert.match(text, /Compare all eight phenotypes in native units/i);
+  assert.match(text, /containing cohort/i);
   assert.match(text, /Pairwise Spearman correlations/i);
   assert.match(text, /Octant-exposure Incidence PheDAS/i);
-  assert.match(text, /PheCode outcomes/i);
-  assert.match(text, /Body-system outcomes/i);
+  assert.match(text, /Look up any gated phenotype–outcome panel/i);
+  assert.match(text, /PheCode outcomes · 120/i);
+  assert.match(text, /Body-system outcomes · 48/i);
+  assert.match(text, /All gated/i);
+  assert.match(text, /Bonferroni/i);
   assert.match(text, /Search outcomes/i);
-  assert.match(text, /6 of 6 published contrasts/i);
-  assert.match(text, /Why the full trajectory is still a figure/i);
-  assert.match(text, /not the underlying timepoint coordinates/i);
-  assert.match(text, /Named octant versus the pooled other seven|pooled other seven octants/i);
+  assert.match(text, /120 of 120 panels/i);
+  assert.match(text, /0\.05\/15/i);
+  assert.match(text, /Curve: unadjusted Aalen–Johansen cumulative incidence/i);
+  assert.match(text, /Thin 3-year tail/i);
+  assert.match(text, /PH diagnostic · not evaluated/i);
+  assert.match(text, /Loading interactive curve/i);
   assert.match(html, /\/images\/phenotypes\/octant-construction\.png/i);
-  assert.match(html, /\/images\/phenotypes\/octant-cif-phecode\.png/i);
+  assert.doesNotMatch(text, /Why the full trajectory is still a figure/i);
   assertNoStarterPreview(html);
 });
 
@@ -559,40 +568,130 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
   );
 });
 
-test("phenotype manifest contains eight public aggregate octants and 21 survival panels", async () => {
+test("phenotype release contains enriched clusters and disclosure-safe interactive curves", async () => {
   const phenotype = await readJson("phenotypes.json");
   const serialized = JSON.stringify(phenotype);
 
-  assert.equal(phenotype.schema_version, 1);
+  assert.equal(phenotype.schema_version, 2);
   assert.equal(phenotype.release.status, "public_research_release");
   assert.equal(phenotype.construction.shared_cohort_n, 70_880);
   assert.equal(phenotype.construction.classification_coverage_pct, 100);
   assert.deepEqual(phenotype.construction.axis_order, ["physiologic", "symptom", "comorbidity"]);
   assert.equal(phenotype.octants.length, 8);
   assert.equal(phenotype.octants.reduce((sum, octant) => sum + octant.n, 0), 70_880);
-  assert.equal(phenotype.octants.every((octant) => Object.keys(octant.signature).length === 17), true);
   assert.deepEqual(
     phenotype.octants.map((octant) => octant.glyph),
     ["□□□", "■□□", "□■□", "□□■", "■■□", "■□■", "□■■", "■■■"],
   );
   assert.equal(phenotype.octants.every((octant) => octant.n >= 11), true);
 
-  assert.deepEqual(
-    phenotype.survival.levels.map((level) => [level.id, level.rows.length]),
-    [["phecode", 6], ["system", 15]],
-  );
-  for (const level of phenotype.survival.levels) {
-    assert.match(level.image.path, /^images\/phenotypes\/[a-z0-9-]+\.png$/);
-    const image = await readFile(new URL(level.image.path, publicRoot));
-    assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-    for (const row of level.rows) {
-      assert.ok(row.n_focal >= 11 && row.events_focal >= 11);
-      assert.ok(row.n_rest >= 11 && row.events_rest >= 11);
-      assert.ok(row.ci_low > 0 && row.ci_low <= row.hr_m4 && row.hr_m4 <= row.ci_high);
-      assert.ok(row.cif3_focal_pct >= 0 && row.cif3_focal_pct <= 100);
-      assert.ok(row.cif3_rest_pct >= 0 && row.cif3_rest_pct <= 100);
+  assert.equal(phenotype.cluster_profiles.metrics.length, 26);
+  assert.equal(new Set(phenotype.cluster_profiles.metrics.map((metric) => metric.id)).size, 26);
+  for (const metric of phenotype.cluster_profiles.metrics) {
+    assert.equal(Object.keys(metric.by_octant).length, 8);
+    assert.equal(metric.overall.standardized_difference, 0);
+    for (const summary of [metric.overall, ...Object.values(metric.by_octant)]) {
+      assert.ok(summary.n_nonmissing >= 11);
+      assert.ok(summary.coverage_pct > 0 && summary.coverage_pct <= 100);
+      assert.equal(summary.suppressed, false);
+      if (metric.metric_type === "binary") {
+        assert.ok(summary.numerator >= 11 && summary.denominator >= 11);
+      } else {
+        assert.ok(Number.isFinite(summary.mean));
+        assert.ok(Number.isFinite(summary.median));
+      }
     }
   }
+
+  assert.deepEqual(
+    phenotype.survival.levels.map((level) => [level.id, level.panel_count, level.outcomes.length]),
+    [["phecode", 120, 15], ["system", 48, 6]],
+  );
+  assert.deepEqual(phenotype.survival.scope, {
+    panel_count: 168,
+    outcome_count: 21,
+    phecode_panels: 120,
+    system_panels: 48,
+    fdr_panels: 31,
+    bonferroni_panels: 21,
+    curve_panels_available: 152,
+    curve_panels_withheld: 16,
+  });
+  assert.match(phenotype.survival.testing.bonferroni, /0\.05\/15/);
+  assert.match(phenotype.survival.testing.bonferroni, /0\.05\/6/);
+  assert.match(phenotype.survival.testing.bonferroni, /not across 168/i);
+
+  const assetPaths = [];
+  let availablePanels = 0;
+  let withheldPanels = 0;
+  let unstablePanels = 0;
+  let fdrPanels = 0;
+  let bonferroniPanels = 0;
+  for (const level of phenotype.survival.levels) {
+    for (const outcome of level.outcomes) {
+      assert.match(outcome.asset_path, new RegExp(`^data/phenotype-survival/${level.id}/[a-z0-9-]+\\.json$`));
+      assetPaths.push(outcome.asset_path);
+      assert.equal(outcome.panels.length, 8);
+      const asset = await readJson(outcome.asset_path.replace(/^data\//, ""));
+      assert.equal(asset.schema_version, 1);
+      assert.equal(asset.level, level.id);
+      assert.equal(asset.outcome_id, outcome.outcome_id);
+      assert.equal(asset.panels.length, 8);
+
+      for (const panel of outcome.panels) {
+        assert.equal(panel.ph_p, null);
+        assert.equal(panel.currently_published, panel.sig_bon);
+        assert.ok(panel.n_focal >= 11 && panel.n_rest >= 11);
+        assert.ok(panel.events_focal === null || panel.events_focal >= 11);
+        assert.ok(panel.events_rest === null || panel.events_rest >= 11);
+        assert.ok(panel.ci_low > 0 && panel.ci_low <= panel.hr_m4 && panel.hr_m4 <= panel.ci_high);
+        assert.ok(panel.cif3_focal_pct >= 0 && panel.cif3_focal_pct <= 100);
+        assert.ok(panel.cif3_rest_pct >= 0 && panel.cif3_rest_pct <= 100);
+        unstablePanels += panel.unstable === "epv<10" ? 1 : 0;
+        fdrPanels += panel.sig_fdr ? 1 : 0;
+        bonferroniPanels += panel.sig_bon ? 1 : 0;
+
+        const curvePanel = asset.panels.find((candidate) => candidate.octant === panel.octant);
+        assert.ok(curvePanel, `missing curve panel for ${level.id} ${outcome.outcome_id} ${panel.octant}`);
+        for (const group of ["focal", "other_seven"]) {
+          const riskRows = curvePanel.risk_table[group];
+          assert.deepEqual(riskRows.map((row) => row.time_years), [0, 1, 2, 3]);
+          assert.ok(riskRows.every((row) => row.n_at_risk >= 11));
+          assert.ok(riskRows.every((row) => row.suppressed === (row.n_events_cum === null)));
+          assert.ok(riskRows.every((row) => row.n_events_cum === null || row.n_events_cum >= 11));
+        }
+
+        if (panel.suppressed) {
+          withheldPanels += 1;
+          assert.equal(panel.curve_available, false);
+          assert.equal(curvePanel.curve_status, "withheld_event_count_suppression");
+          assert.equal(curvePanel.curves, null);
+        } else {
+          availablePanels += 1;
+          assert.equal(panel.curve_available, true);
+          assert.equal(curvePanel.curve_status, "available");
+          for (const group of ["focal", "other_seven"]) {
+            const series = curvePanel.curves[group];
+            assert.equal(series.time_years.length, 120);
+            assert.equal(series.cif_pct.length, 120);
+            assert.equal(series.time_years[0], 0);
+            assert.equal(series.time_years.at(-1), 3);
+            assert.ok(series.time_years.every((value, index, values) => index === 0 || value > values[index - 1]));
+            assert.ok(series.cif_pct.every((value) => value >= 0 && value <= 100));
+            assert.ok(series.cif_pct.every((value, index, values) => index === 0 || value >= values[index - 1] - 1e-10));
+          }
+          assert.ok(Math.abs(curvePanel.curves.focal.cif_pct.at(-1) - panel.cif3_focal_pct) <= 0.00005);
+          assert.ok(Math.abs(curvePanel.curves.other_seven.cif_pct.at(-1) - panel.cif3_rest_pct) <= 0.00005);
+        }
+      }
+    }
+  }
+  assert.equal(new Set(assetPaths).size, 21);
+  assert.equal(availablePanels, 152);
+  assert.equal(withheldPanels, 16);
+  assert.equal(unstablePanels, 80);
+  assert.equal(fdrPanels, 31);
+  assert.equal(bonferroniPanels, 21);
   assert.doesNotMatch(
     serialized,
     /octant_assignments|cross_domain_phenotypes|(?:[a-z]:\\)|(?:https?|file):\/\/|\bmrn\b/i,

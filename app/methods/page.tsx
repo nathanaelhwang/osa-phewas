@@ -148,6 +148,55 @@ export default function MethodsPage() {
               </p>
             </article>
           </div>
+          <div className="definition-grid">
+            <article>
+              <span>Cluster summaries</span>
+              <h2>Measure-specific denominators</h2>
+              <p>
+                The phenotype explorer reports 26 aggregate measures with their
+                own coverage. Follow-up and encounter measures cover the 25,380-person
+                IncWAS spine; age, BMI, and sex cover 53,012 people. The displayed
+                standardized difference is the octant estimate minus the containing
+                cohort estimate, divided by cohort SD—not a two-independent-group SMD.
+              </p>
+            </article>
+            <article>
+              <span>Octant-exposure model</span>
+              <h2>M4 ridge Cox</h2>
+              <p>
+                Each focal octant is compared with the pooled other seven. M4 adjusts
+                for an age spline, sex, study year, race/ethnicity, smoking, income,
+                baseline observation and encounter measures, and BMI. CPAP is not
+                adjusted because it is treated as a mediator.
+              </p>
+            </article>
+            <article>
+              <span>Hierarchical testing</span>
+              <h2>Omnibus gate, then one-vs-rest</h2>
+              <p>
+                All eight contrasts are shown only for outcomes whose 7-df M4 omnibus
+                test reached nominal p &lt; 0.05. Within each focal-octant contrast,
+                Bonferroni uses 0.05/15 for gated PheCodes and 0.05/6 for gated systems;
+                it is not 0.05/168.
+              </p>
+            </article>
+          </div>
+          <p className="method-callout">
+            Octant cumulative-incidence curves are unadjusted tie-aware Aalen–Johansen
+            estimates with death competing; M4 hazard ratios are adjusted estimates from
+            a separate model. Mean follow-up is 1.42 years and only 8.7% of the pooled
+            baseline risk set remains observed at year 3. Eighty of 168 panels have EPV
+            below 10, and proportional-hazards diagnostics were not computed for any
+            octant model.
+          </p>
+          <p className="method-callout">
+            CPAP initiation/adherence distributions are omitted because capture and
+            units do not support a defensible denominator. Race/ethnicity remains an M4
+            adjustment covariate, but its descriptive octant breakdown is not published
+            because one cell is below the disclosure threshold and release is not approved.
+            Curve coordinates are withheld for the 16 panels whose focal event count is
+            suppressed below 11.
+          </p>
           <Link className="primary-link" href="/phenotypes">
             Explore octant phenotypes →
           </Link>

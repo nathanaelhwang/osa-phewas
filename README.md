@@ -7,7 +7,8 @@ non-disease family carries its archived, preliminary, or review status in the
 interface. Incidence PheDAS also includes interactive Aalen–Johansen cumulative-
 incidence curves for its FDR-selected outcomes, stratified by OSA severity and
 landmark CPAP adherence designed to address immortal-time bias. A dedicated Phenotypes section
-describes eight cross-domain octants and their incident-outcome curves.
+describes eight cross-domain octants with 26 aggregate cluster measures and a
+searchable 168-panel phenotype-exposure survival explorer.
 
 The primary presentation is **M4 / Severe vs None**. “None” means AHI `<5`
 within the sleep-clinic referral cohort.
@@ -25,7 +26,7 @@ Open `http://localhost:3000`. Key routes are:
 
 - `/` — atlas overview and feature search
 - `/explore` — interactive Manhattan, volcano, and table views
-- `/phenotypes` — octant construction, clinical signatures, and phenotype-exposure survival findings
+- `/phenotypes` — enriched octant profiles and interactive phenotype-exposure survival curves
 - `/survival` — cumulative-incidence curves by OSA severity or landmark CPAP adherence
 - `/was` — estimand-separated laboratory, medication, behavior, procedure, and utilization scans
 - `/feature?code=401.1` — combined disease evidence for a PheCode, or a namespaced non-disease feature report
@@ -66,4 +67,6 @@ This is an IRB-approved public research release of aggregate results and
 publication figures. Exact exposure-by-outcome cells remain unavailable for
 several WAS families, so the interface does not infer them or enable raw result
 downloads. The survival exporter validates monthly at-risk and event arrays
-internally but intentionally omits those count arrays from browser JSON.
+internally but intentionally omits those count arrays from the OSA-severity and
+landmark-CPAP browser JSON. The separate octant export includes disclosure-
+controlled annual risk tables; exact counts below 11 are null, never zero.

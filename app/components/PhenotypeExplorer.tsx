@@ -5,66 +5,52 @@ import Link from "next/link";
 import { useMemo, useState, type CSSProperties } from "react";
 import {
   publicAssetPath,
+  type DistributionSummary,
   type OctantPhenotype,
-  type OctantSurvivalLevel,
-  type OctantSurvivalRow,
   type PhenotypeDataset,
   type PhenotypeMetric,
+  type PhenotypeMetricDomain,
 } from "../phenotype-data";
+import { OctantSurvivalExplorer } from "./OctantSurvivalExplorer";
 
-const metricOrder = [
-  "odi4",
-  "minimum_spo2",
-  "mean_spo2",
-  "t90",
-  "epworth",
-  "isi",
-  "fosq_impairment",
-  "phq2",
-  "stop",
-  "distinct_phecodes",
-  "obesity",
-  "hyperlipidemia",
-  "hypertension",
-  "impaired_fasting_glucose",
-  "anxiety_disorders",
-  "gerd",
-  "index_ahi",
-];
-
-type MetricDomain = PhenotypeMetric["domain"];
-type MetricDomainFilter = "all" | MetricDomain;
+type MetricDomainFilter = "all" | PhenotypeMetricDomain;
 
 const metricDomainOptions: Array<{ id: MetricDomainFilter; label: string }> = [
-  { id: "all", label: "All 17 measures" },
+  { id: "all", label: "All measures" },
   { id: "physiologic", label: "Physiology" },
   { id: "symptom", label: "Symptoms" },
   { id: "comorbidity", label: "Comorbidity" },
-  { id: "external", label: "Index AHI" },
+  { id: "external", label: "AHI / severity" },
+  { id: "demographic", label: "Demographic" },
+  { id: "follow-up", label: "Follow-up" },
+  { id: "utilisation", label: "Utilization" },
 ];
 
-function formatMetric(metric: PhenotypeMetric) {
-  if (metric.unit === "proportion" || metric.unit === "fraction") return (metric.value * 100).toFixed(1);
-  if (metric.unit === "count") return metric.value.toFixed(0);
-  return metric.value.toFixed(metric.value >= 10 ? 1 : 2);
+function formatValue(metric: PhenotypeMetric, value: number) {
+  if (metric.metric_type === "binary" || metric.unit === "proportion" || metric.unit === "fraction") {
+    return `${(value * 100).toFixed(1)}%`;
+  }
+  if (metric.unit === "count") return value.toFixed(0);
+  return value.toFixed(Math.abs(value) >= 10 ? 1 : 2);
 }
 
-function metricUnit(metric: PhenotypeMetric) {
-  if (metric.unit === "proportion" || metric.unit === "fraction") return "%";
+function displayUnit(metric: PhenotypeMetric) {
+  if (metric.metric_type === "binary" || metric.unit === "proportion" || metric.unit === "fraction") return "";
   return metric.unit;
 }
 
-function octantLabel(id: string) {
-  return id.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+function formatSigned(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)} SD`;
 }
 
-function formatP(value: number) {
-  if (value < 0.001) return value.toExponential(1);
-  return value.toFixed(3);
-}
-
-function rowKey(row: OctantSurvivalRow) {
-  return `${row.outcome_id}|${row.octant}`;
+function matrixStyle(value: number): CSSProperties {
+  const magnitude = Math.min(Math.abs(value) / 1.5, 1);
+  const alpha = 0.07 + magnitude * 0.42;
+  return {
+    backgroundColor: value >= 0
+      ? `rgba(224, 103, 45, ${alpha})`
+      : `rgba(46, 105, 164, ${alpha})`,
+  };
 }
 
 function OctantCard({
@@ -114,55 +100,91 @@ function FigurePanel({
   );
 }
 
+function MetricDetail({
+  metric,
+  summary,
+}: {
+  metric: PhenotypeMetric;
+  summary: DistributionSummary;
+}) {
+  const unit = displayUnit(metric);
+  return (
+    <article className="phenotype-metric-card" data-domain={metric.domain}>
+      <header>
+        <div><span>{metric.domain.replace("-", " ")}</span><h3>{metric.label}</h3></div>
+        <strong>{formatValue(metric, summary.estimate)}{unit ? <small> {unit}</small> : null}</strong>
+      </header>
+      <div className="phenotype-metric-difference" data-direction={summary.standardized_difference >= 0 ? "higher" : "lower"}>
+        <strong>{formatSigned(summary.standardized_difference)}</strong>
+        <span>from the containing cohort</span>
+      </div>
+      {metric.metric_type === "continuous" ? (
+        <dl>
+          <div><dt>Mean ± SD</dt><dd>{formatValue(metric, summary.mean!)} ± {formatValue(metric, summary.sd!)}</dd></div>
+          <div><dt>Median [Q1–Q3]</dt><dd>{formatValue(metric, summary.median!)} [{formatValue(metric, summary.q1!)}–{formatValue(metric, summary.q3!)}]</dd></div>
+          <div><dt>Cohort mean</dt><dd>{formatValue(metric, summary.cohort_estimate)}</dd></div>
+        </dl>
+      ) : (
+        <dl>
+          <div><dt>Count / denominator</dt><dd>{summary.numerator!.toLocaleString()} / {summary.denominator!.toLocaleString()}</dd></div>
+          <div><dt>Cohort proportion</dt><dd>{formatValue(metric, summary.cohort_estimate)}</dd></div>
+        </dl>
+      )}
+      <footer><span>Coverage</span><strong>{summary.coverage_pct.toFixed(1)}%</strong><small>n = {summary.n_nonmissing.toLocaleString()}</small></footer>
+    </article>
+  );
+}
+
 function ClusterComparisonTable({
   data,
-  metricIds,
+  metrics,
   selectedOctantId,
   onSelectOctant,
 }: {
   data: PhenotypeDataset;
-  metricIds: string[];
+  metrics: PhenotypeMetric[];
   selectedOctantId: string;
   onSelectOctant: (id: string) => void;
 }) {
-  const ranges = Object.fromEntries(metricIds.map((metricId) => {
-    const values = data.octants.map((octant) => octant.signature[metricId].value);
-    return [metricId, { minimum: Math.min(...values), maximum: Math.max(...values) }];
-  }));
-
   return (
     <div className="cluster-matrix-scroll">
-      <table className="cluster-matrix">
-        <caption>Aggregate clinical measures across all eight octant phenotypes. Darker cells contain higher numeric values within that row.</caption>
+      <table className="cluster-matrix cluster-matrix--diverging">
+        <caption>Aggregate cluster measures. Cell text is in native units; color is the standardized difference from the containing cohort.</caption>
         <thead>
           <tr>
-            <th scope="col">Clinical measure</th>
-            {data.octants.map((octant) => <th key={octant.id} scope="col" data-selected={octant.id === selectedOctantId}>
-              <button type="button" onClick={() => onSelectOctant(octant.id)} aria-label={`Select ${octant.label}`}>
-                <span>{octant.glyph}</span>
-                <strong>{octant.label}</strong>
-              </button>
-            </th>)}
+            <th scope="col">Measure</th>
+            {data.octants.map((octant) => (
+              <th key={octant.id} scope="col" data-selected={octant.id === selectedOctantId}>
+                <button type="button" onClick={() => onSelectOctant(octant.id)} aria-label={`Select ${octant.label}`}>
+                  <span>{octant.glyph}</span>
+                  <strong>{octant.label}</strong>
+                </button>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {metricIds.map((metricId) => {
-            const metric = data.octants[0].signature[metricId];
-            const range = ranges[metricId];
-            return <tr key={metricId} data-domain={metric.domain}>
-              <th scope="row"><strong>{metric.label}</strong><small>{metricUnit(metric)}</small></th>
+          {metrics.map((metric) => (
+            <tr key={metric.id} data-domain={metric.domain}>
+              <th scope="row"><strong>{metric.label}</strong><small>{displayUnit(metric) || "proportion"}</small></th>
               {data.octants.map((octant) => {
-                const value = octant.signature[metricId];
-                const relative = range.maximum === range.minimum ? 0.5 : (value.value - range.minimum) / (range.maximum - range.minimum);
-                const style: CSSProperties = { backgroundColor: `rgba(34, 94, 166, ${0.07 + relative * 0.39})` };
-                return <td key={octant.id} data-selected={octant.id === selectedOctantId}>
-                  <button type="button" style={style} onClick={() => onSelectOctant(octant.id)} aria-label={`${value.label} in ${octant.label}: ${formatMetric(value)} ${metricUnit(value)}`}>
-                    <strong>{formatMetric(value)}</strong><small>{metricUnit(value)}</small>
-                  </button>
-                </td>;
+                const summary = metric.by_octant[octant.id];
+                return (
+                  <td key={octant.id} data-selected={octant.id === selectedOctantId}>
+                    <button
+                      type="button"
+                      style={matrixStyle(summary.standardized_difference)}
+                      onClick={() => onSelectOctant(octant.id)}
+                      aria-label={`${metric.label} in ${octant.label}: ${formatValue(metric, summary.estimate)}; ${formatSigned(summary.standardized_difference)} from the cohort`}
+                    >
+                      <strong>{formatValue(metric, summary.estimate)}</strong>
+                      <small>{formatSigned(summary.standardized_difference)}</small>
+                    </button>
+                  </td>
+                );
               })}
-            </tr>;
-          })}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -182,128 +204,19 @@ function ScoreCorrelationTable({ data }: { data: PhenotypeDataset }) {
   );
 }
 
-function SurvivalResultsTable({
-  level,
-  rows,
-  selected,
-  onSelect,
-}: {
-  level: OctantSurvivalLevel;
-  rows: OctantSurvivalRow[];
-  selected: OctantSurvivalRow | null;
-  onSelect: (row: OctantSurvivalRow) => void;
-}) {
-  return (
-    <div className="octant-results-scroll">
-      <table className="octant-results-table">
-        <caption>{level.label}: published octant contrasts with structured three-year endpoint data.</caption>
-        <thead><tr><th scope="col">Outcome</th><th scope="col">Focal phenotype</th><th scope="col">Adjusted M4 HR (95% CI)</th><th scope="col">3-year CIF</th><th scope="col">Difference</th></tr></thead>
-        <tbody>
-          {rows.length ? rows.map((row) => {
-            const difference = row.cif3_focal_pct - row.cif3_rest_pct;
-            const isSelected = selected ? rowKey(row) === rowKey(selected) : false;
-            return <tr key={rowKey(row)} data-selected={isSelected}>
-              <td><button type="button" onClick={() => onSelect(row)} aria-pressed={isSelected}><strong>{row.outcome_name}</strong><small>{level.id === "phecode" ? `PheCode ${row.outcome_id}` : "Body system"}</small></button></td>
-              <td>{octantLabel(row.octant)}</td>
-              <td><strong>{row.hr_m4.toFixed(2)}</strong> <small>({row.ci_low.toFixed(2)}–{row.ci_high.toFixed(2)})</small></td>
-              <td>{row.cif3_focal_pct.toFixed(2)}% <small>vs {row.cif3_rest_pct.toFixed(2)}%</small></td>
-              <td data-direction={difference >= 0 ? "higher" : "lower"}>{difference >= 0 ? "+" : ""}{difference.toFixed(2)} pp</td>
-            </tr>;
-          }) : <tr><td colSpan={5} className="octant-results-empty">No published contrast matches these filters.</td></tr>}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function SurvivalSummary({
-  level,
-  row,
-}: {
-  level: OctantSurvivalLevel;
-  row: OctantSurvivalRow;
-}) {
-  const maximum = Math.max(row.cif3_focal_pct, row.cif3_rest_pct, 1);
-  const raised = row.hr_m4 >= 1;
-  return (
-    <article className="octant-survival-summary">
-      <div className="octant-survival-summary__heading">
-        <div>
-          <span>{level.id === "phecode" ? `PheCode ${row.outcome_id}` : "Body-system outcome"}</span>
-          <h3>{row.outcome_name}</h3>
-          <p><strong>{octantLabel(row.octant)}</strong> versus the pooled other seven octants.</p>
-        </div>
-        <div className={raised ? "effect-badge effect-badge--raised" : "effect-badge effect-badge--lower"}>
-          <span>Adjusted M4 HR</span>
-          <strong>{row.hr_m4.toFixed(2)}</strong>
-          <small>{row.ci_low.toFixed(2)}–{row.ci_high.toFixed(2)} · p {formatP(row.p)}</small>
-        </div>
-      </div>
-      <div className="cif-comparison" aria-label="Three-year cumulative incidence comparison">
-        <div>
-          <span>Focal octant</span>
-          <div className="cif-bar"><i style={{ width: `${(row.cif3_focal_pct / maximum) * 100}%` }} /></div>
-          <strong>{row.cif3_focal_pct.toFixed(2)}%</strong>
-          <small>{row.events_focal.toLocaleString()} events / {row.n_focal.toLocaleString()} at risk</small>
-        </div>
-        <div>
-          <span>Other seven</span>
-          <div className="cif-bar cif-bar--rest"><i style={{ width: `${(row.cif3_rest_pct / maximum) * 100}%` }} /></div>
-          <strong>{row.cif3_rest_pct.toFixed(2)}%</strong>
-          <small>{row.events_rest.toLocaleString()} events / {row.n_rest.toLocaleString()} at risk</small>
-        </div>
-      </div>
-      <p className="octant-survival-summary__note">Three-year values are unadjusted Aalen–Johansen cumulative incidence. The hazard ratio is adjusted; do not interpret either as a causal treatment effect.</p>
-    </article>
-  );
-}
-
 export function PhenotypeExplorer({ data }: { data: PhenotypeDataset }) {
   const [selectedOctantId, setSelectedOctantId] = useState(data.octants[0]?.id ?? "");
   const [metricDomain, setMetricDomain] = useState<MetricDomainFilter>("all");
-  const [levelId, setLevelId] = useState<"phecode" | "system">("phecode");
-  const [survivalQuery, setSurvivalQuery] = useState("");
-  const [survivalOctant, setSurvivalOctant] = useState("all");
-  const [outcomeSelections, setOutcomeSelections] = useState(() => Object.fromEntries(
-    data.survival.levels.map((level) => [level.id, rowKey(level.rows[0])]),
-  ) as Record<"phecode" | "system", string>);
+  const [metricQuery, setMetricQuery] = useState("");
 
-  const selectedOctant = useMemo(
-    () => data.octants.find((octant) => octant.id === selectedOctantId) ?? data.octants[0]!,
-    [data.octants, selectedOctantId],
-  );
-  const activeLevel = useMemo(
-    () => data.survival.levels.find((level) => level.id === levelId) ?? data.survival.levels[0]!,
-    [data.survival.levels, levelId],
-  );
-  const selectedSurvivalRow = useMemo(
-    () => activeLevel.rows.find((row) => rowKey(row) === outcomeSelections[levelId]) ?? activeLevel.rows[0]!,
-    [activeLevel, levelId, outcomeSelections],
-  );
-  const visibleMetricIds = useMemo(
-    () => metricOrder.filter((metricId) => metricDomain === "all" || data.octants[0].signature[metricId].domain === metricDomain),
-    [data.octants, metricDomain],
-  );
-  const availableSurvivalOctants = useMemo(
-    () => Array.from(new Set(activeLevel.rows.map((row) => row.octant))).sort((left, right) => octantLabel(left).localeCompare(octantLabel(right))),
-    [activeLevel.rows],
-  );
-  const filteredSurvivalRows = useMemo(() => {
-    const query = survivalQuery.trim().toLowerCase();
-    return activeLevel.rows.filter((row) => {
-      const matchesOctant = survivalOctant === "all" || row.octant === survivalOctant;
-      const searchText = `${row.outcome_id} ${row.outcome_name} ${row.octant}`.toLowerCase();
-      return matchesOctant && (!query || searchText.includes(query));
+  const selectedOctant = data.octants.find((octant) => octant.id === selectedOctantId) ?? data.octants[0]!;
+  const visibleMetrics = useMemo(() => {
+    const needle = metricQuery.trim().toLowerCase();
+    return data.cluster_profiles.metrics.filter((metric) => {
+      const domainMatch = metricDomain === "all" || metric.domain === metricDomain;
+      return domainMatch && (!needle || `${metric.label} ${metric.domain} ${metric.unit}`.toLowerCase().includes(needle));
     });
-  }, [activeLevel.rows, survivalOctant, survivalQuery]);
-  const displayedSurvivalRow = useMemo(
-    () => filteredSurvivalRows.find((row) => rowKey(row) === rowKey(selectedSurvivalRow)) ?? filteredSurvivalRows[0] ?? null,
-    [filteredSurvivalRows, selectedSurvivalRow],
-  );
-
-  function selectSurvivalRow(row: OctantSurvivalRow) {
-    setOutcomeSelections((current) => ({ ...current, [levelId]: rowKey(row) }));
-  }
+  }, [data.cluster_profiles.metrics, metricDomain, metricQuery]);
 
   return (
     <main className="phenotype-page page-shell">
@@ -323,14 +236,16 @@ export function PhenotypeExplorer({ data }: { data: PhenotypeDataset }) {
       </header>
 
       <section className="phenotype-axis-grid" aria-label="Phenotype axes">
-        {data.construction.axes.map((axis, index) => <article key={axis.id}><span>Axis {index + 1}</span><h2>{axis.label}</h2><strong>{axis.high_label}</strong><p>{axis.description}</p><code>{axis.score} cut {data.construction.cut_points[axis.score].toFixed(3)}</code></article>)}
+        {data.construction.axes.map((axis, index) => (
+          <article key={axis.id}><span>Axis {index + 1}</span><h2>{axis.label}</h2><strong>{axis.high_label}</strong><p>{axis.description}</p><code>{axis.score} cut {data.construction.cut_points[axis.score].toFixed(3)}</code></article>
+        ))}
       </section>
       <p className="phenotype-cut-note">{data.construction.cut_point_note}</p>
 
       <section className="octant-explorer" aria-labelledby="octant-explorer-title">
         <div className="section-heading">
           <div><span>Octant explorer</span><h2 id="octant-explorer-title">What characterizes each phenotype?</h2></div>
-          <p>Select an octant to inspect its axes and aggregate clinical signature.</p>
+          <p>Select an octant, then search or filter 26 aggregate measures to inspect its distribution and coverage.</p>
         </div>
         <div className="octant-card-grid">
           {data.octants.map((octant) => <OctantCard key={octant.id} octant={octant} selected={octant.id === selectedOctant.id} onSelect={() => setSelectedOctantId(octant.id)} />)}
@@ -349,53 +264,40 @@ export function PhenotypeExplorer({ data }: { data: PhenotypeDataset }) {
             <div><dt>Median AHI</dt><dd>{selectedOctant.median_ahi.toFixed(1)} <small>events/h</small></dd></div>
             <div><dt>Median PheCodes</dt><dd>{selectedOctant.median_codes.toFixed(0)}</dd></div>
           </dl>
-          <div className="metric-domain-heading"><div><span>Clinical signature</span><strong>{visibleMetricIds.length} of 17 aggregate measures</strong></div><div className="metric-domain-switch" role="group" aria-label="Clinical measure domain">{metricDomainOptions.map((option) => <button type="button" key={option.id} aria-pressed={metricDomain === option.id} onClick={() => setMetricDomain(option.id)}>{option.label}</button>)}</div></div>
-          <div className="signature-metric-grid">
-            {visibleMetricIds.map((metricId) => {
-              const metric = selectedOctant.signature[metricId];
-              return <div key={metricId} data-domain={metric.domain}><span>{metric.label}</span><strong>{formatMetric(metric)}</strong><small>{metricUnit(metric)}</small></div>;
-            })}
+
+          <div className="metric-domain-heading metric-domain-heading--searchable">
+            <div><span>Aggregate phenotype profile</span><strong>{visibleMetrics.length} of {data.cluster_profiles.metrics.length} measures</strong></div>
+            <label><span>Find a measure</span><input type="search" value={metricQuery} onChange={(event) => setMetricQuery(event.target.value)} placeholder="Try hypertension, BMI, or sleepiness" /></label>
           </div>
+          <div className="metric-domain-switch" role="group" aria-label="Clinical measure domain">
+            {metricDomainOptions.map((option) => <button type="button" key={option.id} aria-pressed={metricDomain === option.id} onClick={() => setMetricDomain(option.id)}>{option.label}</button>)}
+          </div>
+          <div className="phenotype-metric-grid">
+            {visibleMetrics.map((metric) => <MetricDetail key={metric.id} metric={metric} summary={metric.by_octant[selectedOctant.id]} />)}
+          </div>
+          {!visibleMetrics.length ? <p className="phenotype-metric-empty">No aggregate measure matches this search and domain.</p> : null}
         </article>
       </section>
 
       <section className="phenotype-figures" aria-labelledby="phenotype-figures-title">
-        <div className="section-heading"><div><span>Tabular cluster comparison</span><h2 id="phenotype-figures-title">Compare all eight phenotypes in native units</h2></div><p>Every value below comes from the aggregate clinical-signature table. Select any column to update the phenotype profile above.</p></div>
-        <ClusterComparisonTable data={data} metricIds={visibleMetricIds} selectedOctantId={selectedOctant.id} onSelectOctant={setSelectedOctantId} />
+        <div className="section-heading"><div><span>Cluster comparison</span><h2 id="phenotype-figures-title">Compare all eight phenotypes in native units</h2></div><p>Blue cells are below and orange cells above the containing cohort. Select any column to update the profile.</p></div>
+        <div className="cluster-matrix-key" aria-label="Standardized difference color key"><span>− Lower than cohort</span><i /><span>Higher than cohort +</span></div>
+        <ClusterComparisonTable data={data} metrics={visibleMetrics} selectedOctantId={selectedOctant.id} onSelectOctant={setSelectedOctantId} />
+        <p className="cluster-matrix-note">Standardized difference means group estimate minus cohort estimate, divided by the cohort SD. Each octant is part of that cohort; this is not a two-independent-group standardized mean difference. Coverage is shown on every profile card.</p>
         <ScoreCorrelationTable data={data} />
         <details className="phenotype-source-figures">
-          <summary>Supplemental publication figures</summary>
-          <p>The data-driven comparison above is the primary cluster view. These original figures remain available for publication context and full-resolution download.</p>
+          <summary>Supplemental phenotype-construction figures</summary>
+          <p>The data-driven comparison above is the primary cluster view. These source figures remain available for publication context and full-resolution download.</p>
           <FigurePanel image={data.construction.image} alt="Octant construction from median splits of three nearly independent phenotype scores" caption="The three score planes are nearly uncorrelated, yielding eight groups of similar size and complete cohort coverage." />
-          <FigurePanel image={data.signature_figure} alt="Heatmap of the aggregate clinical signature for each octant phenotype" caption="Clinical measurements are shown in native units; color indicates standardized contrast from the shared cohort mean." className="phenotype-figure--signature" />
+          <FigurePanel image={data.signature_figure} alt="Heatmap of the aggregate clinical signature for each octant phenotype" caption="The source clinical-signature figure is retained as a supplement; the interactive table above includes the expanded 26-measure export." className="phenotype-figure--signature" />
         </details>
       </section>
 
-      <section className="octant-survival" aria-labelledby="octant-survival-title">
-        <div className="section-heading">
-          <div><span>Octant-exposure Incidence PheDAS</span><h2 id="octant-survival-title">Incident outcomes by phenotype</h2></div>
-          <p>Each contrast compares one named octant with the pooled other seven. Death is treated as a competing event.</p>
-        </div>
-        <div className="view-tabs octant-survival-tabs" role="group" aria-label="Octant survival outcome level">
-          {data.survival.levels.map((level) => <button type="button" key={level.id} aria-pressed={levelId === level.id} onClick={() => { setLevelId(level.id); setSurvivalQuery(""); setSurvivalOctant("all"); }}>{level.label}</button>)}
-        </div>
-        <div className="octant-survival-controls">
-          <label><span>Search outcomes</span><input type="search" value={survivalQuery} onChange={(event) => setSurvivalQuery(event.target.value)} placeholder={levelId === "phecode" ? "Name or PheCode" : "Body-system name"} /></label>
-          <label><span>Focal phenotype</span><select value={survivalOctant} onChange={(event) => setSurvivalOctant(event.target.value)}><option value="all">All phenotypes</option>{availableSurvivalOctants.map((octant) => <option key={octant} value={octant}>{octantLabel(octant)}</option>)}</select></label>
-          <div><strong>{filteredSurvivalRows.length} of {activeLevel.rows.length} published contrasts</strong><p>{activeLevel.description}</p></div>
-        </div>
-        <SurvivalResultsTable level={activeLevel} rows={filteredSurvivalRows} selected={displayedSurvivalRow} onSelect={selectSurvivalRow} />
-        {displayedSurvivalRow ? <SurvivalSummary level={activeLevel} row={displayedSurvivalRow} /> : <p className="octant-detail-empty">No detail is shown because no published contrast matches the current filters.</p>}
-        <div className="curve-data-limit"><strong>Why the full trajectory is still a figure</strong><p>The structured release contains each panel’s adjusted M4 estimate, counts, and three-year cumulative-incidence endpoint—but not the underlying timepoint coordinates used to draw the curve. The endpoint explorer above is fully tabular; an exact interactive curve requires a new aggregate time-series export from the secure analysis.</p></div>
-        <details className="phenotype-source-figures phenotype-source-figures--survival">
-          <summary>Open the supplemental full-curve publication figure</summary>
-          <FigurePanel image={activeLevel.image} alt={`${activeLevel.label} cumulative-incidence curves comparing focal octants with the pooled other seven`} caption="Validated full-resolution cumulative-incidence panels. These are retained only because the current aggregate release does not include the underlying timepoint coordinates." className="phenotype-figure--survival" />
-        </details>
-      </section>
+      <OctantSurvivalExplorer data={data} />
 
       <section className="curve-notes phenotype-caveats" aria-labelledby="phenotype-caveats-title">
-        <div><span className="section-kicker">Interpretation guardrails</span><h2 id="phenotype-caveats-title">A taxonomy for research—not a clinical diagnostic rule</h2></div>
-        <div className="curve-note-grid">{data.caveats.map((caveat, index) => <article key={caveat}><strong>{["Continuous gradients", "Contact and coding", "Adjusted comparisons", "Curve availability"][index]}</strong><p>{caveat}</p></article>)}</div>
+        <div><span className="section-kicker">Interpretation guardrails</span><h2 id="phenotype-caveats-title">A research taxonomy—not a clinical diagnostic rule</h2></div>
+        <div className="curve-note-grid">{data.caveats.map((caveat) => <article key={caveat.title}><strong>{caveat.title}</strong><p>{caveat.text}</p></article>)}</div>
       </section>
 
       <div className="phenotype-next"><div><span className="section-kicker">Related evidence</span><h2>Compare with OSA severity and landmark CPAP adherence</h2><p>The phenotype-exposure curves complement—rather than replace—the main Incidence PheDAS severity analysis.</p></div><Link href="/survival?code=401.1&amp;view=cpap&amp;window=180">Open landmark incidence curves →</Link></div>
