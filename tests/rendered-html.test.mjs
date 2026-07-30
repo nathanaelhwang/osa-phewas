@@ -203,9 +203,19 @@ test("server-renders the octant phenotype explorer and survival summaries", asyn
   assert.match(text, /Symptom burden/i);
   assert.match(text, /Comorbidity burden/i);
   assert.match(text, /Mild All/i);
+  assert.match(text, /All 17 measures/i);
+  assert.match(text, /FOSQ impairment/i);
+  assert.match(text, /Hyperlipidemia/i);
+  assert.match(text, /Impaired fasting glucose/i);
+  assert.match(text, /Compare all eight phenotypes in native units/i);
+  assert.match(text, /Pairwise Spearman correlations/i);
   assert.match(text, /Octant-exposure Incidence PheDAS/i);
   assert.match(text, /PheCode outcomes/i);
   assert.match(text, /Body-system outcomes/i);
+  assert.match(text, /Search outcomes/i);
+  assert.match(text, /6 of 6 published contrasts/i);
+  assert.match(text, /Why the full trajectory is still a figure/i);
+  assert.match(text, /not the underlying timepoint coordinates/i);
   assert.match(text, /Named octant versus the pooled other seven|pooled other seven octants/i);
   assert.match(html, /\/images\/phenotypes\/octant-construction\.png/i);
   assert.match(html, /\/images\/phenotypes\/octant-cif-phecode\.png/i);
@@ -560,6 +570,7 @@ test("phenotype manifest contains eight public aggregate octants and 21 survival
   assert.deepEqual(phenotype.construction.axis_order, ["physiologic", "symptom", "comorbidity"]);
   assert.equal(phenotype.octants.length, 8);
   assert.equal(phenotype.octants.reduce((sum, octant) => sum + octant.n, 0), 70_880);
+  assert.equal(phenotype.octants.every((octant) => Object.keys(octant.signature).length === 17), true);
   assert.deepEqual(
     phenotype.octants.map((octant) => octant.glyph),
     ["□□□", "■□□", "□■□", "□□■", "■■□", "■□■", "□■■", "■■■"],
