@@ -35,6 +35,7 @@ import {
   type WasState,
 } from "../was-state";
 import { PlotlyChart } from "./PlotlyChart";
+import { UtilizationProfile } from "./UtilizationProfile";
 
 type WasExplorerProps = { initialState: WasState };
 type ChartSpec = { data: unknown[]; layout: Record<string, unknown> };
@@ -550,6 +551,8 @@ export function WasExplorer({ initialState }: WasExplorerProps) {
       </section>
 
       {activeMetadata ? <section className="was-release-note" aria-label="Analysis release status"><span className={releaseClass(activeMetadata.release_status)}>{humanize(activeMetadata.release_status)}</span><p><strong>{activeMetadata.label}</strong>{activeMetadata.release_note ? ` · ${activeMetadata.release_note}` : ""}</p></section> : null}
+
+      {state.family === "utilwas" ? <UtilizationProfile profileRef={manifest?.utilization_profile} manifestLoading={manifestLoading} window={state.window} /> : null}
 
       <section className="scan-summary" aria-label="Current scan summary">
         <div><strong>{visibleRows.length.toLocaleString()}</strong><span>features displayed</span></div>

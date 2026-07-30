@@ -54,6 +54,20 @@ does not reconstruct or infer missing exposure-by-outcome cells. LabWAS,
 MedWAS, and ProcWAS are marked as archived snapshots, BehWAS as preliminary
 archived results, and UtilWAS as archived results pending review.
 
+Publish the separately approved, descriptive UtilWAS utilization profile after
+the multi-WAS manifest exists:
+
+```powershell
+python .\scripts\export_utilization_profile.py
+```
+
+This exporter reads only the aggregate 70-row profile and its release manifest
+under `results/utilwas_results/website_exports`. It requires both public-release
+flags, an owner-approved primary-care crosswalk, a complete 7 Ã— 2 Ã— 5 grid,
+and disclosure-safe supporting counts. It writes
+`public/data/was-utilization-profile.json` and adds a top-level profile
+reference to `was-manifest.json`; patient-level source paths are not published.
+
 ## Aggregate Incidence PheDAS curve export
 
 Export the plot-ready cumulative-incidence curves separately:

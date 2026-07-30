@@ -408,6 +408,13 @@ for (const route of [
       ),
     );
     assert.match(text, /Family-specific release and disclosure status remains visible above each scan/i);
+    if (route.family === "utilwas") {
+      assert.match(text, /Utilization profile/i);
+      assert.match(text, /Mean .* SD across OSA severity strata/i);
+      assert.match(text, /1-year pre-index/i);
+    } else {
+      assert.doesNotMatch(text, /Utilization profile/i);
+    }
     assertNoStarterPreview(html);
   });
 }
@@ -1116,6 +1123,98 @@ test("WAS manifest and every partition preserve estimand and release boundaries"
     medicationIds.some((value) => /^0\d+/.test(value)),
     "MedWAS must retain at least one zero-padded GPI identifier",
   );
+});
+
+test("UtilWAS utilization profile is complete, approved, and disclosure-safe", async () => {
+  const manifest = await readJson("was-manifest.json");
+  const profileRef = manifest.utilization_profile;
+  assert.ok(profileRef, "WAS manifest must reference the utilization profile");
+  assert.equal(profileRef.path, "was-utilization-profile.json");
+  assert.equal(profileRef.row_count, 70);
+  assert.equal(profileRef.release_status, "owner_approved");
+  assert.deepEqual(profileRef.windows, ["1yr", "5yr"]);
+  assert.deepEqual(profileRef.severities, ["Overall", "None", "Mild", "Moderate", "Severe"]);
+
+  const payload = await readJson(publicDataPath(profileRef.path));
+  const { metadata, columns } = payload;
+  assert.equal(payload.schema_version, 1);
+  assert.equal(metadata.row_count, 70);
+  assert.equal(metadata.release_approved, true);
+  assert.equal(metadata.public_website_release_approved, true);
+  assert.equal(metadata.disclosure_threshold, 11);
+  assert.deepEqual(metadata.primary_care_specialty_list, [
+    "Family Practice",
+    "Internal Medicine",
+    "Pediatrics",
+  ]);
+  assert.match(metadata.specialty_care_definition, /primary-care/i);
+  assert.match(metadata.specialty_care_definition, /excluding exact.*Urgent Care/i);
+  assert.match(metadata.ed_inpatient_overlap_warning, /intentionally overlap/i);
+
+  const required = [
+    "metric_id",
+    "metric_label",
+    "window",
+    "severity",
+    "n_denominator",
+    "n_nonmissing",
+    "n_with_use",
+    "mean",
+    "sd",
+    "median",
+    "unit",
+    "denominator_definition",
+    "metric_definition",
+    "suppressed",
+    "suppression_reason",
+  ];
+  assertColumnLengths(columns, required, 70);
+  const metrics = [
+    "outpatient_rate",
+    "inpatient_rate",
+    "hospital_los_days",
+    "ed_rate",
+    "urgent_care_rate",
+    "primary_care_rate",
+    "specialty_rate",
+  ];
+  assert.deepEqual([...new Set(columns.metric_id)].sort(), [...metrics].sort());
+  assert.deepEqual([...new Set(columns.window)].sort(), ["1yr", "5yr"]);
+  assert.deepEqual(
+    [...new Set(columns.severity)].sort(),
+    ["Mild", "Moderate", "None", "Overall", "Severe"],
+  );
+  const keys = columns.metric_id.map(
+    (metric, index) => `${metric}|${columns.window[index]}|${columns.severity[index]}`,
+  );
+  assert.equal(new Set(keys).size, 70);
+  for (const metric of metrics) {
+    assert.equal(columns.metric_id.filter((value) => value === metric).length, 10);
+  }
+
+  for (let index = 0; index < 70; index += 1) {
+    assert.equal(columns.suppressed[index], false);
+    assert.equal(columns.suppression_reason[index], null);
+    for (const field of ["mean", "sd", "median"]) {
+      assert.equal(typeof columns[field][index], "number");
+      assert.ok(Number.isFinite(columns[field][index]) && columns[field][index] >= 0);
+    }
+    for (const field of ["n_denominator", "n_nonmissing", "n_with_use"]) {
+      assert.ok(Number.isInteger(columns[field][index]));
+      assert.ok(columns[field][index] >= metadata.disclosure_threshold);
+    }
+    assert.ok(columns.n_with_use[index] <= columns.n_nonmissing[index]);
+    if (columns.metric_id[index] === "hospital_los_days") {
+      assert.equal(columns.unit[index], "days/admission");
+      assert.ok(columns.n_nonmissing[index] <= columns.n_denominator[index]);
+    } else {
+      assert.equal(columns.unit[index], "encounters/person-year");
+      assert.equal(columns.n_nonmissing[index], columns.n_denominator[index]);
+    }
+  }
+
+  const serialized = JSON.stringify(payload);
+  assert.doesNotMatch(serialized, /(?:[A-Za-z]:[\\/]|\.parquet\b|patient_id|person_id|mrn|util_id)/i);
 });
 
 test("cross-domain feature registry is aligned, namespaced, and searchable", async () => {
