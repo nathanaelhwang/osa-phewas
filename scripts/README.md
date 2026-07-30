@@ -62,24 +62,42 @@ Export the plot-ready cumulative-incidence curves separately:
 python .\scripts\export_survival_data.py
 ```
 
-The exporter reads only four fixed, allowlisted aggregate files in
-`results/incwas_results/survival_curves`: the source README, the FDR feature
-list, and the severity- and CPAP-stratified curve CSVs. It never reads
-`survival_long.parquet` and has no source-path option. Exact schemas, feature
-joins, group and panel labels, the monthly time grid, numeric ranges,
-monotonicity, source curve thresholds, and source hashes are validated before
-any website file is written.
+The exporter reads fixed, allowlisted aggregate files from two locations. The
+FDR feature list and severity curves come from
+`results/incwas_results/survival_curves`; landmark CPAP curves come from
+`results/incwas_results/survival_curves_landmark/curve_adherence.csv`. It never
+reads either patient-level parquet and has no source-path option. Exact schemas,
+feature joins, landmark windows, group labels, monthly time grids, numeric
+ranges, monotonicity, source curve thresholds, and source hashes are validated
+before any website file is written.
 
 Outputs are:
 
 - `survival-manifest.json`, which records provenance, estimand and stratum
   semantics, disclosure status, feature paths, and the default feature.
-- `survival/{phecode}.json`, one columnar severity and CPAP curve payload per
+- `survival/{phecode}.json`, one columnar severity and landmark CPAP payload per
   FDR-significant PheCode.
 
 Browser JSON contains only `time_years` and aggregate Aalen-Johansen
 `cif_pct` curve values. Exact feature-level and timepoint risk/event counts are
-validated internally but withheld pending institutional disclosure review.
-Risk tables and downloads therefore remain disabled. CPAP curves are
-descriptive, not causal; the shared No-OSA reference is stored once in the
-severity section and reused across CPAP severity panels.
+validated internally but withheld from browser JSON. Risk tables and downloads
+therefore remain disabled. Landmark CPAP curves are OSA-pooled and use 90- and
+180-day grace periods; they address immortal-time bias but remain descriptive
+and vulnerable to healthy-adherer confounding.
+
+## Aggregate octant-phenotype export
+
+Export the public phenotype summary, publication figures, and structured
+three-year survival summaries with:
+
+```powershell
+python .\scripts\export_phenotype_data.py
+```
+
+The exporter reads only fixed aggregate summaries and four publication PNGs.
+It intentionally has no source entry for the patient-level phenotype assignment
+or cross-domain phenotype files. Outputs are `public/data/phenotypes.json` and
+four images under `public/images/phenotypes/`. The octant survival source does
+not include an aggregate monthly time series, so the website presents the
+validated figures alongside interactive three-year summary records rather than
+reconstructing curves from patient-level data.

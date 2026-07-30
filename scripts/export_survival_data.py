@@ -2,9 +2,8 @@
 """Export allowlisted aggregate Incidence PheDAS cumulative-incidence curves.
 
 The source paths are fixed. This exporter never reads the patient-level
-``survival_long.parquet`` file. Exact risk-set and event-count columns are used
-only for validation and are deliberately withheld from browser JSON pending
-institutional disclosure review.
+patient-level parquet files. Exact risk-set and event-count columns are used
+only for validation and are deliberately withheld from browser JSON.
 """
 
 from __future__ import annotations
@@ -21,24 +20,29 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
-EXPORTER_VERSION = "1.0.0"
-DEFAULT_RELEASE = "2026-07-22"
+SCHEMA_VERSION = 2
+EXPORTER_VERSION = "2.0.0"
+DEFAULT_RELEASE = "2026-07-29"
 DEFAULT_FEATURE = "401.1"
 
 WEBSITE_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = WEBSITE_ROOT.parent
 SOURCE_ROOT = PROJECT_ROOT / "results" / "incwas_results" / "survival_curves"
+LANDMARK_SOURCE_ROOT = (
+    PROJECT_ROOT / "results" / "incwas_results" / "survival_curves_landmark"
+)
 OUTPUT_ROOT = WEBSITE_ROOT / "public" / "data"
 
 SOURCES = {
     "documentation": {
         "path": SOURCE_ROOT / "README.md",
+        "root": SOURCE_ROOT,
         "role": "Source methods and caveats",
         "columns": None,
     },
     "features": {
         "path": SOURCE_ROOT / "fdr_phecodes.csv",
+        "root": SOURCE_ROOT,
         "role": "FDR-significant feature metadata",
         "columns": {
             "phecode",
@@ -53,6 +57,7 @@ SOURCES = {
     },
     "severity_curves": {
         "path": SOURCE_ROOT / "curve_severity.csv",
+        "root": SOURCE_ROOT,
         "role": "Aalen-Johansen curves by OSA severity",
         "columns": {
             "phecode",
@@ -64,13 +69,20 @@ SOURCES = {
             "n_events_cum",
         },
     },
+    "landmark_documentation": {
+        "path": LANDMARK_SOURCE_ROOT / "README.md",
+        "root": LANDMARK_SOURCE_ROOT,
+        "role": "Landmark CPAP methods and caveats",
+        "columns": None,
+    },
     "cpap_curves": {
-        "path": SOURCE_ROOT / "curve_cpap.csv",
-        "role": "Aalen-Johansen curves by CPAP nightly use and OSA severity",
+        "path": LANDMARK_SOURCE_ROOT / "curve_adherence.csv",
+        "root": LANDMARK_SOURCE_ROOT,
+        "role": "Landmark Aalen-Johansen curves by CPAP adherence among OSA patients",
         "columns": {
             "phecode",
             "phenotype",
-            "panel",
+            "window_days",
             "group",
             "time_years",
             "cif_pct",
@@ -81,9 +93,14 @@ SOURCES = {
 }
 
 SEVERITY_GROUPS = ("No OSA", "Mild", "Moderate", "Severe")
-CPAP_PANELS = ("Mild", "Moderate", "Severe")
-CPAP_GROUPS = ("No OSA", "<2 hr/night", "2-4 hr/night", "4+ hr/night")
-CPAP_EXPOSURE_GROUPS = CPAP_GROUPS[1:]
+CPAP_WINDOWS = (180, 90)
+CPAP_GROUPS = (
+    "4+ hr/night",
+    "2-4 hr/night",
+    "0-2 hr/night",
+    "never-started",
+    "unknown",
+)
 CONTRASTS = (
     "omnibus",
     "mild_vs_none",
@@ -93,14 +110,13 @@ CONTRASTS = (
     "ahi_ge5",
     "ahi_ge15",
 )
-EXPECTED_CPAP_OMISSIONS = {
-    ("291.8", "Moderate", "2-4 hr/night"),
-    ("291.8", "Severe", "2-4 hr/night"),
-}
 TIME_GRID = tuple(round(index / 12, 4) for index in range(73))
+LANDMARK_TIME_GRID = tuple(round(index / 12, 4) for index in range(61))
 TABLE_TIME_YEARS = (0, 1, 2, 3, 4, 5, 6)
+LANDMARK_TABLE_TIME_YEARS = (0, 1, 2, 3, 4, 5)
 CURVE_BASELINE_MIN = 20
 CURVE_EVENTS_MIN = 5
+LANDMARK_CURVE_EVENTS_MIN = 3
 
 BLOCKED_HEADER_TOKENS = {
     "address",
@@ -222,7 +238,8 @@ def sha256(path: Path) -> str:
 def read_csv(source_id: str) -> list[dict[str, str | None]]:
     spec = SOURCES[source_id]
     path = spec["path"].resolve(strict=True)
-    if path != (SOURCE_ROOT / path.name).resolve(strict=True):
+    source_root = spec["root"].resolve(strict=True)
+    if path.parent != source_root:
         raise ExportValidationError(f"{source_id}: source escaped allowlisted directory")
     with path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
@@ -293,15 +310,18 @@ def load_curves(
         group = required_text(row, "group", context)
         if group not in (CPAP_GROUPS if is_cpap else SEVERITY_GROUPS):
             raise ExportValidationError(f"{context}: unsupported group")
-        panel = required_text(row, "panel", context) if is_cpap else None
-        if is_cpap and panel not in CPAP_PANELS:
-            raise ExportValidationError(f"{context}: unsupported CPAP panel")
+        window_days = integer(row, "window_days", context) if is_cpap else None
+        if is_cpap and window_days not in CPAP_WINDOWS:
+            raise ExportValidationError(f"{context}: unsupported landmark window")
         time_years = finite_number(row, "time_years", context)
         cif_pct = finite_number(row, "cif_pct", context)
         n_at_risk = integer(row, "n_at_risk", context)
         n_events_cum = integer(row, "n_events_cum", context)
-        if time_years < 0 or time_years > 6:
-            raise ExportValidationError(f"{context}: time outside 0-6 years")
+        maximum_time = 5 if is_cpap else 6
+        if time_years < 0 or time_years > maximum_time:
+            raise ExportValidationError(
+                f"{context}: time outside 0-{maximum_time} years"
+            )
         if cif_pct < 0 or cif_pct > 100:
             raise ExportValidationError(f"{context}: CIF outside 0-100 percent")
         if n_at_risk < 0 or n_events_cum < 0:
@@ -310,11 +330,11 @@ def load_curves(
             raise ExportValidationError(f"{context}: risk set exceeds feature population")
         if n_events_cum > features[code]["n_events_internal"]:
             raise ExportValidationError(f"{context}: curve events exceed feature events")
-        row_key = (code, panel or "", group, str(time_years))
+        row_key = (code, str(window_days or ""), group, str(time_years))
         if row_key in seen:
             raise ExportValidationError(f"{context}: duplicate curve coordinate")
         seen.add(row_key)
-        series_key = (code, panel, group) if is_cpap else (code, group)
+        series_key = (code, window_days, group) if is_cpap else (code, group)
         series[series_key].append(
             {
                 "time_years": time_years,
@@ -329,12 +349,15 @@ def load_curves(
 
 
 def validate_series(
-    series: dict[tuple[str, ...], list[dict[str, Any]]], context: str
+    series: dict[tuple[str, ...], list[dict[str, Any]]],
+    context: str,
+    expected_time_grid: tuple[float, ...],
+    minimum_events: int,
 ) -> None:
     for key, points in series.items():
         points.sort(key=lambda point: point["time_years"])
         times = tuple(point["time_years"] for point in points)
-        if times != TIME_GRID:
+        if times != expected_time_grid:
             raise ExportValidationError(f"{context} {key}: unexpected monthly time grid")
         cifs = [point["cif_pct"] for point in points]
         risks = [point["n_at_risk_internal"] for point in points]
@@ -347,7 +370,7 @@ def validate_series(
             raise ExportValidationError(f"{context} {key}: increasing risk set")
         if any(next_value < value for value, next_value in zip(events, events[1:])):
             raise ExportValidationError(f"{context} {key}: decreasing cumulative events")
-        if risks[0] < CURVE_BASELINE_MIN or events[-1] < CURVE_EVENTS_MIN:
+        if risks[0] < CURVE_BASELINE_MIN or events[-1] < minimum_events:
             raise ExportValidationError(f"{context} {key}: source threshold violation")
 
 
@@ -371,29 +394,30 @@ def validate_severity(
 
 def validate_cpap(
     cpap: dict[tuple[str, ...], list[dict[str, Any]]],
-    severity: dict[tuple[str, ...], list[dict[str, Any]]],
     features: dict[str, dict[str, Any]],
 ) -> None:
     actual = set(cpap)
-    expected = {
-        (code, panel, group)
+    allowed = {
+        (code, window_days, group)
         for code in features
-        for panel in CPAP_PANELS
+        for window_days in CPAP_WINDOWS
         for group in CPAP_GROUPS
-    } - EXPECTED_CPAP_OMISSIONS
-    if actual != expected:
-        missing = sorted(expected - actual)
-        unexpected = sorted(actual - expected)
+    }
+    unexpected = sorted(actual - allowed)
+    if unexpected:
         raise ExportValidationError(
-            "cpap_curves: unexpected series availability; "
-            f"missing={missing}, unexpected={unexpected}"
+            f"cpap_curves: unexpected series availability; unexpected={unexpected}"
         )
     for code in features:
-        severity_reference = severity[(code, "No OSA")]
-        for panel in CPAP_PANELS:
-            if cpap[(code, panel, "No OSA")] != severity_reference:
+        for window_days in CPAP_WINDOWS:
+            available = {
+                group
+                for candidate_code, candidate_window, group in actual
+                if candidate_code == code and candidate_window == window_days
+            }
+            if not available or "never-started" not in available:
                 raise ExportValidationError(
-                    f"cpap_curves {code} {panel}: common reference mismatch"
+                    f"cpap_curves {code} {window_days}: required landmark strata missing"
                 )
 
 
@@ -412,34 +436,30 @@ def aligned_columns(
 def strata_metadata() -> dict[str, Any]:
     return {
         "severity_group_order": list(SEVERITY_GROUPS),
-        "cpap_panel_order": list(CPAP_PANELS),
+        "cpap_window_order": list(CPAP_WINDOWS),
         "cpap_group_order": list(CPAP_GROUPS),
-        "cpap_panel_label": "OSA severity",
-        "cpap_panel_definition": (
-            "Each panel is restricted to the named OSA severity; No OSA is the "
-            "common reference in every panel."
+        "cpap_window_label": "Landmark grace period",
+        "cpap_window_definition": (
+            "The clock starts at index plus the selected grace period among OSA "
+            "patients who remain under observation and event-free to that landmark."
         ),
-        "cpap_exposure_label": "CPAP nightly use",
+        "cpap_exposure_label": "Landmark CPAP adherence",
         "cpap_exposure_definition": (
-            "Source-defined nightly-use categories among people with a PAP record."
+            "Source-defined nightly-use categories among OSA patients after a "
+            "90- or 180-day landmark. Unknown means a device was set up but usage "
+            "was not captured."
         ),
-        "cpap_common_reference": {
-            "group": "No OSA",
-            "source_section": "severity",
-            "source_group": "No OSA",
-            "applies_to_panels": list(CPAP_PANELS),
-        },
     }
 
 
 def disclosure_metadata() -> dict[str, Any]:
     return {
-        "release_status": "private_research_disclosure_review_required",
+        "release_status": "public_research_release",
         "release_note": (
-            "Aggregate cumulative-incidence percentages are provided for private "
-            "research review. Public release requires institutional approval."
+            "Aggregate cumulative-incidence percentages are approved for public "
+            "research dissemination; exact monthly count arrays remain withheld."
         ),
-        "counts_disclosure_status": "withheld_pending_review",
+        "counts_disclosure_status": "withheld_from_public_release",
         "counts_withheld": [
             "feature-level at-risk count",
             "feature-level event count",
@@ -448,7 +468,7 @@ def disclosure_metadata() -> dict[str, Any]:
         ],
         "risk_table_available": False,
         "downloads_enabled": False,
-        "public_release_allowed": False,
+        "public_release_allowed": True,
     }
 
 
@@ -471,15 +491,15 @@ def feature_payload(
 
     cpap_records = []
     present_nonreference = set()
-    for panel in CPAP_PANELS:
-        for group in CPAP_EXPOSURE_GROUPS:
-            key = (code, panel, group)
+    for window_days in CPAP_WINDOWS:
+        for group in CPAP_GROUPS:
+            key = (code, window_days, group)
             if key not in cpap:
                 continue
-            present_nonreference.add((panel, group))
+            present_nonreference.add((window_days, group))
             cpap_records.extend(
                 {
-                    "panel": panel,
+                    "window_days": window_days,
                     "group": group,
                     "time_years": point["time_years"],
                     "cif_pct": point["cif_pct"],
@@ -488,13 +508,13 @@ def feature_payload(
             )
     omitted = [
         {
-            "panel": panel,
+            "window_days": window_days,
             "group": group,
             "reason": "source_thin_stratum_rule",
         }
-        for panel in CPAP_PANELS
-        for group in CPAP_EXPOSURE_GROUPS
-        if (panel, group) not in present_nonreference
+        for window_days in CPAP_WINDOWS
+        for group in CPAP_GROUPS
+        if (window_days, group) not in present_nonreference
     ]
 
     disclosure = disclosure_metadata()
@@ -519,17 +539,21 @@ def feature_payload(
                 "Incident feature PheCode in the harmonized-washout at-risk set"
             ),
             "time_origin": "OSA study index",
+            "cpap_time_origin": "Landmark at OSA study index plus selected grace period",
             "time_unit": "years",
             "follow_up_end": "2023-05-31",
             "curve_inclusion": {
                 "minimum_baseline_at_risk": CURVE_BASELINE_MIN,
                 "minimum_incident_events": CURVE_EVENTS_MIN,
+                "cpap_minimum_incident_events": LANDMARK_CURVE_EVENTS_MIN,
                 "thin_strata_omitted": True,
             },
             "table_time_years": list(TABLE_TIME_YEARS),
+            "cpap_table_time_years": list(LANDMARK_TABLE_TIME_YEARS),
+            "cpap_default_window_days": CPAP_WINDOWS[0],
             "cpap_interpretation": (
-                "Descriptive association only; CPAP strata are confounded and "
-                "must not be interpreted as a causal treatment effect."
+                "The grace-period landmark addresses immortal-time bias. Curves are "
+                "still descriptive and unadjusted; healthy-adherer confounding remains."
             ),
             "release_status": disclosure["release_status"],
             "release_note": disclosure["release_note"],
@@ -551,7 +575,7 @@ def feature_payload(
             "omitted_strata": omitted,
             "columns": aligned_columns(
                 cpap_records,
-                ("panel", "group", "time_years", "cif_pct"),
+                ("window_days", "group", "time_years", "cif_pct"),
                 f"survival/{code}.json cpap",
             ),
         },
@@ -578,10 +602,15 @@ def build(release_id: str) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     features = load_features()
     severity = load_curves("severity_curves", features)
     cpap = load_curves("cpap_curves", features)
-    validate_series(severity, "severity_curves")
-    validate_series(cpap, "cpap_curves")
+    validate_series(severity, "severity_curves", TIME_GRID, CURVE_EVENTS_MIN)
+    validate_series(
+        cpap,
+        "cpap_curves",
+        LANDMARK_TIME_GRID,
+        LANDMARK_CURVE_EVENTS_MIN,
+    )
     validate_severity(severity, features)
-    validate_cpap(cpap, severity, features)
+    validate_cpap(cpap, features)
 
     default_feature = DEFAULT_FEATURE if DEFAULT_FEATURE in features else sorted(features)[0]
     outputs = {
@@ -615,13 +644,14 @@ def build(release_id: str) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
         "exporter_version": EXPORTER_VERSION,
         "release": {
             "id": release_id,
-            "audience": "authorized researchers",
+            "audience": "public researchers",
             "scope": "Aggregate Incidence PheDAS cumulative-incidence curves",
         },
         "defaults": {
             "feature_id": default_feature,
             "view": "severity",
             "feature_path": f"survival/{default_feature}.json",
+            "window_days": CPAP_WINDOWS[0],
         },
         "analysis": {
             "analysis_id": "incidence-phedas-survival",
@@ -637,9 +667,12 @@ def build(release_id: str) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
             "curve_inclusion": {
                 "minimum_baseline_at_risk": CURVE_BASELINE_MIN,
                 "minimum_incident_events": CURVE_EVENTS_MIN,
+                "cpap_minimum_incident_events": LANDMARK_CURVE_EVENTS_MIN,
                 "thin_strata_omitted": True,
             },
             "table_time_years": list(TABLE_TIME_YEARS),
+            "cpap_table_time_years": list(LANDMARK_TABLE_TIME_YEARS),
+            "cpap_default_window_days": CPAP_WINDOWS[0],
         },
         "strata": strata_metadata(),
         "disclosure": disclosure_metadata(),

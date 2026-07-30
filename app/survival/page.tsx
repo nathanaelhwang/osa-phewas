@@ -8,7 +8,7 @@ import { normalizeSurvivalState } from "../survival-state";
 export const metadata: Metadata = {
   title: "Incidence curves",
   description:
-    "Explore cumulative incidence after index by OSA severity and recorded CPAP usage.",
+    "Explore cumulative incidence by OSA severity and landmark CPAP adherence designed to address immortal-time bias.",
 };
 
 export default async function SurvivalPage({

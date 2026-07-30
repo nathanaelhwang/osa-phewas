@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const dataRoot = new URL("../public/data/", import.meta.url);
+const publicRoot = new URL("../public/", import.meta.url);
 let workerPromise;
 
 async function getWorker() {
@@ -157,6 +158,7 @@ test("server-renders the researcher-facing atlas home", async () => {
   assert.match(text, /do not estimate population OSA prevalence or establish causality/i);
   assert.match(text, /Search diseases, labs, medications, behaviors, procedures, and utilization/i);
   assert.match(html, /href=["']\/survival\?code=401\.1&amp;view=severity["']/i);
+  assert.match(html, /href=["']\/phenotypes["']/i);
   assertNoStarterPreview(html);
 });
 
@@ -168,7 +170,7 @@ test("server-renders the cumulative-incidence explorer with a safe default", asy
   assert.match(text, /Aalen[–-]Johansen/i);
   assert.match(text, /death competing/i);
   assert.match(text, /descriptive and unadjusted/i);
-  assert.match(text, /Count arrays remain outside the browser bundle pending disclosure review/i);
+  assert.match(text, /Aggregate cumulative-incidence percentages are public/i);
   assertSelectedOption(html, "401.1");
   assert.match(text, /Essential hypertension/i);
   assert.match(html, /<button(?=[^>]*aria-pressed=["']true["'])[^>]*>OSA severity<\/button>/i);
@@ -176,16 +178,37 @@ test("server-renders the cumulative-incidence explorer with a safe default", asy
   assertNoStarterPreview(html);
 });
 
-test("server-renders the CPAP curve state with its non-causal warning", async () => {
-  const html = await render("/survival?code=291.8&view=cpap");
+test("server-renders the landmark CPAP state with immortal-time and confounding context", async () => {
+  const html = await render("/survival?code=291.8&view=cpap&window=180");
   const text = visibleText(html);
 
   assertSelectedOption(html, "291.8");
   assert.match(text, /Alteration of consciousness/i);
-  assert.match(html, /<button(?=[^>]*aria-pressed=["']true["'])[^>]*>Recorded CPAP usage<\/button>/i);
-  assert.match(text, /Descriptive CPAP strata[—-]not treatment effects/i);
-  assert.match(text, /missing usage is not a “no CPAP” group/i);
-  assert.match(text, /same No OSA reference curve is repeated in each panel/i);
+  assert.match(html, /<button(?=[^>]*aria-pressed=["']true["'])[^>]*>Landmark CPAP adherence<\/button>/i);
+  assert.match(text, /180 days[·\s]+primary/i);
+  assert.match(text, /addresses immortal-time bias[—-]not confounding/i);
+  assert.match(text, /healthy-adherer confounding remains/i);
+  assert.match(text, /device was set up but usage was not captured/i);
+  assertNoStarterPreview(html);
+});
+
+test("server-renders the octant phenotype explorer and survival summaries", async () => {
+  const html = await render("/phenotypes");
+  const text = visibleText(html);
+
+  assert.match(html, /<title>Octant phenotypes · OSA Association Atlas<\/title>/i);
+  assert.match(text, /Three near-independent axes\. Eight octant phenotypes\./i);
+  assert.match(text, /70,880 people/i);
+  assert.match(text, /Physiologic severity/i);
+  assert.match(text, /Symptom burden/i);
+  assert.match(text, /Comorbidity burden/i);
+  assert.match(text, /Mild All/i);
+  assert.match(text, /Octant-exposure Incidence PheDAS/i);
+  assert.match(text, /PheCode outcomes/i);
+  assert.match(text, /Body-system outcomes/i);
+  assert.match(text, /Named octant versus the pooled other seven|pooled other seven octants/i);
+  assert.match(html, /\/images\/phenotypes\/octant-construction\.png/i);
+  assert.match(html, /\/images\/phenotypes\/octant-cif-phecode\.png/i);
   assertNoStarterPreview(html);
 });
 
@@ -405,7 +428,7 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
     "participant_count",
   ]);
 
-  assert.equal(manifest.schema_version, 1);
+  assert.equal(manifest.schema_version, 2);
   assert.deepEqual(
     { feature: manifest.defaults.feature_id, view: manifest.defaults.view },
     { feature: "401.1", view: "severity" },
@@ -417,10 +440,18 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
     manifest.features.filter((feature) => feature.osa_control).map((feature) => feature.feature_id),
     ["327.3"],
   );
-  assert.equal(manifest.disclosure.counts_disclosure_status, "withheld_pending_review");
+  assert.equal(manifest.disclosure.counts_disclosure_status, "withheld_from_public_release");
   assert.equal(manifest.disclosure.risk_table_available, false);
   assert.equal(manifest.disclosure.downloads_enabled, false);
-  assert.equal(manifest.disclosure.public_release_allowed, false);
+  assert.equal(manifest.disclosure.public_release_allowed, true);
+  assert.deepEqual(manifest.strata.cpap_window_order, [180, 90]);
+  assert.deepEqual(manifest.strata.cpap_group_order, [
+    "4+ hr/night",
+    "2-4 hr/night",
+    "0-2 hr/night",
+    "never-started",
+    "unknown",
+  ]);
   assert.equal(manifest.counts.feature_count, 40);
 
   for (const feature of manifest.features) {
@@ -439,11 +470,11 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
   for (const feature of manifest.features) {
     const payload = await readJson(feature.path);
     loaded.push(payload);
-    assert.equal(payload.schema_version, 1);
+    assert.equal(payload.schema_version, 2);
     assert.equal(payload.metadata.feature_id, feature.feature_id);
     assert.equal(payload.metadata.feature_name, feature.feature_name);
     assert.equal(payload.metadata.osa_control, feature.osa_control);
-    assert.equal(payload.metadata.counts_disclosure_status, "withheld_pending_review");
+    assert.equal(payload.metadata.counts_disclosure_status, "withheld_from_public_release");
     assert.equal(payload.metadata.risk_table_available, false);
     assert.equal(payload.metadata.downloads_enabled, false);
     assert.deepEqual(
@@ -452,7 +483,7 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
     );
     assert.deepEqual(
       Object.keys(payload.cpap.columns).sort(),
-      ["cif_pct", "group", "panel", "time_years"],
+      ["cif_pct", "group", "time_years", "window_days"],
     );
     assertColumnLengths(
       payload.severity.columns,
@@ -461,7 +492,7 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
     );
     assertColumnLengths(
       payload.cpap.columns,
-      ["panel", "group", "time_years", "cif_pct"],
+      ["window_days", "group", "time_years", "cif_pct"],
       payload.cpap.row_count,
     );
     assertMonotoneCurveColumns(
@@ -471,23 +502,21 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
     );
     assertMonotoneCurveColumns(
       payload.cpap.columns,
-      ["panel", "group"],
+      ["window_days", "group"],
       `${feature.feature_id} CPAP`,
     );
     assert.deepEqual(
       [...new Set(payload.severity.columns.group)].sort(),
       ["Mild", "Moderate", "No OSA", "Severe"],
     );
-    assert.deepEqual(
-      [...new Set(payload.cpap.columns.panel)].sort(),
-      ["Mild", "Moderate", "Severe"],
+    assert.deepEqual([...new Set(payload.cpap.columns.window_days)].sort((a, b) => a - b), [90, 180]);
+    const allowedCpapGroups = new Set(manifest.strata.cpap_group_order);
+    assert.equal(
+      [...new Set(payload.cpap.columns.group)].every((group) => allowedCpapGroups.has(group)),
+      true,
     );
-    assert.deepEqual(
-      [...new Set(payload.cpap.columns.group)].sort(),
-      ["2-4 hr/night", "4+ hr/night", "<2 hr/night"],
-    );
+    assert.equal(payload.cpap.columns.group.includes("never-started"), true);
     assert.equal(payload.cpap.columns.group.includes("No OSA"), false);
-    assert.equal(payload.strata.cpap_common_reference.group, "No OSA");
     assert.ok(payload.severity.columns.group.includes("No OSA"));
     assert.deepEqual(
       [...new Set(nestedKeys(payload).filter((key) => prohibitedKeys.has(key)))],
@@ -496,23 +525,66 @@ test("survival manifest and curve payloads are complete, monotone, and count-fre
     );
   }
 
-  const sparse = loaded.find((payload) => payload.metadata.feature_id === "291.8");
-  assert.ok(sparse, "missing PheCode 291.8 curve payload");
-  const suppliedPairs = [...new Set(sparse.cpap.columns.panel.map(
-    (panel, index) => `${panel}|${sparse.cpap.columns.group[index]}`,
+  const sparse = loaded.find((payload) => payload.metadata.feature_id === "327.41");
+  assert.ok(sparse, "missing PheCode 327.41 curve payload");
+  const suppliedPairs = [...new Set(sparse.cpap.columns.window_days.map(
+    (windowDays, index) => `${windowDays}|${sparse.cpap.columns.group[index]}`,
   ))].sort();
   assert.deepEqual(suppliedPairs, [
-    "Mild|2-4 hr/night",
-    "Mild|4+ hr/night",
-    "Mild|<2 hr/night",
-    "Moderate|4+ hr/night",
-    "Moderate|<2 hr/night",
-    "Severe|4+ hr/night",
-    "Severe|<2 hr/night",
+    "180|never-started",
+    "90|never-started",
+    "90|unknown",
   ].sort());
   assert.deepEqual(
-    sparse.cpap.omitted_strata.map(({ panel, group }) => `${panel}|${group}`).sort(),
-    ["Moderate|2-4 hr/night", "Severe|2-4 hr/night"],
+    sparse.cpap.omitted_strata.map(({ window_days, group }) => `${window_days}|${group}`).sort(),
+    [
+      "180|0-2 hr/night",
+      "180|2-4 hr/night",
+      "180|4+ hr/night",
+      "180|unknown",
+      "90|0-2 hr/night",
+      "90|2-4 hr/night",
+      "90|4+ hr/night",
+    ].sort(),
+  );
+});
+
+test("phenotype manifest contains eight public aggregate octants and 21 survival panels", async () => {
+  const phenotype = await readJson("phenotypes.json");
+  const serialized = JSON.stringify(phenotype);
+
+  assert.equal(phenotype.schema_version, 1);
+  assert.equal(phenotype.release.status, "public_research_release");
+  assert.equal(phenotype.construction.shared_cohort_n, 70_880);
+  assert.equal(phenotype.construction.classification_coverage_pct, 100);
+  assert.deepEqual(phenotype.construction.axis_order, ["physiologic", "symptom", "comorbidity"]);
+  assert.equal(phenotype.octants.length, 8);
+  assert.equal(phenotype.octants.reduce((sum, octant) => sum + octant.n, 0), 70_880);
+  assert.deepEqual(
+    phenotype.octants.map((octant) => octant.glyph),
+    ["□□□", "■□□", "□■□", "□□■", "■■□", "■□■", "□■■", "■■■"],
+  );
+  assert.equal(phenotype.octants.every((octant) => octant.n >= 11), true);
+
+  assert.deepEqual(
+    phenotype.survival.levels.map((level) => [level.id, level.rows.length]),
+    [["phecode", 6], ["system", 15]],
+  );
+  for (const level of phenotype.survival.levels) {
+    assert.match(level.image.path, /^images\/phenotypes\/[a-z0-9-]+\.png$/);
+    const image = await readFile(new URL(level.image.path, publicRoot));
+    assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    for (const row of level.rows) {
+      assert.ok(row.n_focal >= 11 && row.events_focal >= 11);
+      assert.ok(row.n_rest >= 11 && row.events_rest >= 11);
+      assert.ok(row.ci_low > 0 && row.ci_low <= row.hr_m4 && row.hr_m4 <= row.ci_high);
+      assert.ok(row.cif3_focal_pct >= 0 && row.cif3_focal_pct <= 100);
+      assert.ok(row.cif3_rest_pct >= 0 && row.cif3_rest_pct <= 100);
+    }
+  }
+  assert.doesNotMatch(
+    serialized,
+    /octant_assignments|cross_domain_phenotypes|(?:[a-z]:\\)|(?:https?|file):\/\/|\bmrn\b/i,
   );
 });
 

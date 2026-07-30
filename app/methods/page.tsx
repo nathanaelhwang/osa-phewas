@@ -108,6 +108,51 @@ export default function MethodsPage() {
           </p>
         </section>
 
+        <section className="evidence-section" aria-labelledby="phenotype-methods-title">
+          <div className="section-heading">
+            <div>
+              <span>Cross-domain OSA phenotypes</span>
+              <h2 id="phenotype-methods-title">Three gradients combined into eight octants</h2>
+            </div>
+            <p>The taxonomy separates physiologic severity, symptom burden, and coded comorbidity burden.</p>
+          </div>
+          <div className="definition-grid">
+            <article>
+              <span>Domain models</span>
+              <h2>Complementary latent axes</h2>
+              <p>
+                Model-derived scores summarize sleep-study physiology, symptoms,
+                and comorbidities. The axes are nearly independent and should be
+                described as regions of continuous gradients—not biological
+                subpopulations.
+              </p>
+            </article>
+            <article>
+              <span>Octant construction</span>
+              <h2>Median split × three axes</h2>
+              <p>
+                Each score is split at its shared-cohort median, classifying all
+                70,880 people into eight near-balanced groups. The three-square
+                glyph records whether physiology, symptoms, and comorbidity are
+                above the median, in that order.
+              </p>
+            </article>
+            <article>
+              <span>Interpretation</span>
+              <h2>Cohort-specific research taxonomy</h2>
+              <p>
+                Cut points are not clinical thresholds and do not transfer
+                unchanged. The comorbidity axis also reflects healthcare contact
+                and record completeness; downstream M4 models adjust for age and
+                sex because octants are strongly structured by both.
+              </p>
+            </article>
+          </div>
+          <Link className="primary-link" href="/phenotypes">
+            Explore octant phenotypes →
+          </Link>
+        </section>
+
         <section className="evidence-section" aria-labelledby="curves-methods-title">
           <div className="section-heading">
             <div>
@@ -121,10 +166,10 @@ export default function MethodsPage() {
               <span>Estimator</span>
               <h2>Aalen–Johansen curves</h2>
               <p>
-                The curve view reports cumulative incidence from index through six
-                years while treating death as a competing event. It does not use
-                one minus Kaplan–Meier, which would overstate incidence when a
-                competing event is present.
+                Severity curves report cumulative incidence from index through six
+                years. Landmark CPAP curves report five years from index plus the
+                selected grace period. Both treat death as a competing event and do
+                not use one minus Kaplan–Meier.
               </p>
             </article>
             <article>
@@ -138,22 +183,22 @@ export default function MethodsPage() {
               </p>
             </article>
             <article>
-              <span>Recorded CPAP usage</span>
-              <h2>Descriptive, not a treatment effect</h2>
+              <span>Landmark CPAP adherence</span>
+              <h2>Landmark-based, still descriptive</h2>
               <p>
-                CPAP strata are observational and include only participants with
-                recorded usage. Missing usage is not a no-CPAP group. Confounding,
-                adherence selection, and exposure timing prevent causal treatment
-                interpretation; No OSA is repeated as a common external reference.
+                The 90- and 180-day grace-period landmarks require OSA patients to
+                remain observed and event-free to the landmark, then restart the
+                analysis clock. This design addresses immortal-time bias. It does not remove
+                healthy-adherer confounding, so curves remain associational rather
+                than treatment effects; 180 days is the primary view.
               </p>
             </article>
           </div>
           <p className="method-callout">
-            Exact monthly at-risk and cumulative-event cells, uncertainty bands,
-            and downloads are unavailable in this preview. Count arrays remain
-            outside the browser bundle pending an institution-approved primary and
-            complementary disclosure policy. Follow-up ends May 31, 2023, and late
-            curve tails may be supported by thinner risk sets.
+            Aggregate cumulative-incidence percentages are released publicly.
+            Exact monthly at-risk and cumulative-event arrays, uncertainty bands,
+            and curve downloads remain outside the browser bundle. Follow-up ends
+            May 31, 2023, and late curve tails may be supported by thinner risk sets.
           </p>
           <Link className="primary-link" href="/survival?code=401.1&amp;view=severity">
             Explore cumulative incidence curves →

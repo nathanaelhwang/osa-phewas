@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  commonReferenceLabel,
   fetchSurvivalFeature,
   type SurvivalFeaturePayload,
   type SurvivalManifest,
@@ -11,6 +10,7 @@ import {
 } from "../survival-data";
 import {
   survivalStateToSearch,
+  type LandmarkWindow,
   type SurvivalState,
   type SurvivalView,
 } from "../survival-state";
@@ -18,7 +18,7 @@ import { PlotlyChart } from "./PlotlyChart";
 
 type CurveSeries = {
   group: string;
-  panel?: string;
+  windowDays?: LandmarkWindow;
   time: number[];
   cif: number[];
 };
@@ -31,10 +31,11 @@ const severityStyle: Record<string, { color: string; dash: string }> = {
 };
 
 function cpapStyle(group: string) {
-  if (group === "No OSA") return { color: "#68716e", dash: "dash" };
-  if (group.includes("<2")) return { color: "#84364f", dash: "solid" };
-  if (group.includes("2-4") || group.includes("2–4")) return { color: "#cf6b13", dash: "dash" };
-  return { color: "#08766f", dash: "dot" };
+  if (group === "4+ hr/night") return { color: "#168b45", dash: "solid" };
+  if (group.includes("2-4") || group.includes("2–4")) return { color: "#83c95b", dash: "dash" };
+  if (group.includes("0-2") || group.includes("0–2")) return { color: "#e58a3c", dash: "dashdot" };
+  if (group === "never-started") return { color: "#c7392f", dash: "solid" };
+  return { color: "#7b817f", dash: "dot" };
 }
 
 function ordered<T extends { group: string }>(rows: T[], order: string[]) {
@@ -64,40 +65,27 @@ function severitySeries(payload: SurvivalFeaturePayload): CurveSeries[] {
   return ordered([...grouped.values()], payload.strata.severity_group_order);
 }
 
-function cpapSeries(
+function landmarkCpapSeries(
   payload: SurvivalFeaturePayload,
-  severity: CurveSeries[],
-  commonReference: string,
-) {
-  const byPanel = new Map<string, Map<string, CurveSeries>>();
+  windowDays: LandmarkWindow,
+): CurveSeries[] {
+  const grouped = new Map<string, CurveSeries>();
   const { columns } = payload.cpap;
   for (let index = 0; index < payload.cpap.row_count; index += 1) {
-    const panel = columns.panel[index];
+    if (Number(columns.window_days[index]) !== windowDays) continue;
     const group = columns.group[index];
-    const panelSeries = byPanel.get(panel) ?? new Map<string, CurveSeries>();
-    const series = panelSeries.get(group) ?? { panel, group, time: [], cif: [] };
+    const series = grouped.get(group) ?? { windowDays, group, time: [], cif: [] };
     series.time.push(Number(columns.time_years[index]));
     series.cif.push(Number(columns.cif_pct[index]));
-    panelSeries.set(group, series);
-    byPanel.set(panel, panelSeries);
+    grouped.set(group, series);
   }
-  const reference = severity.find((series) => series.group === commonReference);
-  return payload.strata.cpap_panel_order.map((panel) => {
-    const observed = [...(byPanel.get(panel)?.values() ?? [])];
-    for (const series of observed) {
-      const zipped = series.time.map((time, index) => ({ time, cif: series.cif[index] }))
-        .sort((a, b) => a.time - b.time);
-      series.time = zipped.map((point) => point.time);
-      series.cif = zipped.map((point) => point.cif);
-    }
-    const withReference = reference
-      ? [{ ...reference, panel }, ...observed.filter((series) => series.group !== commonReference)]
-      : observed;
-    return {
-      panel,
-      series: ordered(withReference, payload.strata.cpap_group_order),
-    };
-  });
+  for (const series of grouped.values()) {
+    const zipped = series.time.map((time, index) => ({ time, cif: series.cif[index] }))
+      .sort((a, b) => a.time - b.time);
+    series.time = zipped.map((point) => point.time);
+    series.cif = zipped.map((point) => point.cif);
+  }
+  return ordered([...grouped.values()], payload.strata.cpap_group_order);
 }
 
 function yMaximum(series: CurveSeries[]) {
@@ -112,6 +100,7 @@ function chartSpec(
   kind: SurvivalView,
   height: number,
   showLegend = true,
+  xTitle = kind === "severity" ? "Years since index" : "Years since landmark",
 ) {
   return {
     data: series.map((item) => {
@@ -139,8 +128,8 @@ function chartSpec(
       legend: { orientation: "h", x: 0, y: -0.2, font: { size: 11 } },
       font: { family: "Inter, Arial, sans-serif", color: "#172422", size: 12 },
       xaxis: {
-        title: { text: "Years since index" },
-        range: [0, 6],
+        title: { text: xTitle },
+        range: [0, kind === "severity" ? 6 : 5],
         tickmode: "linear",
         dtick: 1,
         gridcolor: "#e6ece8",
@@ -190,7 +179,7 @@ function AnnualCurveTable({
       <table className="curve-table">
         <caption>{caption}</caption>
         <thead><tr><th scope="col">Group</th>{years.map((year) => <th scope="col" key={year}>Year {year}</th>)}</tr></thead>
-        <tbody>{series.map((item) => <tr key={`${item.panel ?? "severity"}-${item.group}`}><th scope="row">{item.group}</th>{years.map((year) => <td key={year}>{formatPct(valueAtYear(item, year))}</td>)}</tr>)}</tbody>
+        <tbody>{series.map((item) => <tr key={`${item.windowDays ?? "severity"}-${item.group}`}><th scope="row">{item.group}</th>{years.map((year) => <td key={year}>{formatPct(valueAtYear(item, year))}</td>)}</tr>)}</tbody>
       </table>
     </div>
   );
@@ -260,6 +249,9 @@ export function SurvivalExplorer({
     code: manifest.features.some((feature) => feature.feature_id === initialState.code)
       ? initialState.code
       : manifest.defaults.feature_id,
+    windowDays: manifest.strata.cpap_window_order.includes(initialState.windowDays)
+      ? initialState.windowDays
+      : manifest.defaults.window_days,
   }));
   const [payload, setPayload] = useState<SurvivalFeaturePayload | null>(null);
   const [query, setQuery] = useState("");
@@ -294,22 +286,29 @@ export function SurvivalExplorer({
   }, [state]);
 
   const severity = useMemo(() => payload ? severitySeries(payload) : [], [payload]);
-  const commonReference = commonReferenceLabel(
-    payload?.strata.common_reference ??
-    payload?.strata.cpap_common_reference ??
-    manifest.strata.cpap_common_reference,
+  const landmarkCpap = useMemo(
+    () => payload ? landmarkCpapSeries(payload, state.windowDays) : [],
+    [payload, state.windowDays],
   );
-  const panels = useMemo(
-    () => payload ? cpapSeries(payload, severity, commonReference) : [],
-    [payload, severity, commonReference],
+  const activeSeries = state.view === "severity" ? severity : landmarkCpap;
+  const yMax = yMaximum(activeSeries);
+  const years = state.view === "severity"
+    ? payload?.metadata.table_time_years ?? [0, 1, 2, 3, 4, 5, 6]
+    : payload?.metadata.cpap_table_time_years ?? [0, 1, 2, 3, 4, 5];
+  const severitySpec = chartSpec(severity, yMax, "severity", 520);
+  const cpapSpec = chartSpec(
+    landmarkCpap,
+    yMax,
+    "cpap",
+    520,
+    true,
+    `Years since landmark (index + ${state.windowDays} days)`,
   );
-  const allSeries = [...severity, ...panels.flatMap((panel) => panel.series)];
-  const yMax = yMaximum(allSeries);
-  const years = payload?.metadata.table_time_years?.length
-    ? payload.metadata.table_time_years
-    : [0, 1, 2, 3, 4, 5, 6];
 
   const setView = (view: SurvivalView) => setState((current) => ({ ...current, view }));
+  const setWindowDays = (windowDays: LandmarkWindow) => {
+    setState((current) => ({ ...current, view: "cpap", windowDays }));
+  };
 
   return (
     <main className="survival-page page-shell">
@@ -319,7 +318,7 @@ export function SurvivalExplorer({
         <div>
           <div className="section-kicker">Incidence PheDAS · survival analysis</div>
           <h1>Cumulative incidence after index</h1>
-          <p>Follow FDR-selected incident disease outcomes through six years, stratified by OSA severity or recorded CPAP usage.</p>
+          <p>Follow FDR-selected incident disease outcomes by OSA severity, or from a landmark CPAP adherence analysis designed to address immortal-time bias.</p>
         </div>
         <aside className="hero__note">
           <span>Observed absolute incidence</span>
@@ -334,18 +333,24 @@ export function SurvivalExplorer({
 
       <div className="view-tabs survival-tabs" role="group" aria-label="Curve stratification">
         <button type="button" aria-pressed={state.view === "severity"} onClick={() => setView("severity")}>OSA severity</button>
-        <button type="button" aria-pressed={state.view === "cpap"} onClick={() => setView("cpap")}>Recorded CPAP usage</button>
+        <button type="button" aria-pressed={state.view === "cpap"} onClick={() => setView("cpap")}>Landmark CPAP adherence</button>
         <span className="curve-key">Stepped curves · cumulative incidence (%)</span>
       </div>
 
-      {state.view === "cpap" ? <div className="cpap-warning"><strong>Descriptive CPAP strata—not treatment effects.</strong><span>Usage is observational and available only where CPAP records exist; missing usage is not a “no CPAP” group. The same No OSA reference curve is repeated in each panel.</span></div> : null}
+      {state.view === "cpap" ? <>
+        <div className="landmark-window-switch" role="group" aria-label="Landmark grace period">
+          <span>Grace period</span>
+          {manifest.strata.cpap_window_order.map((windowDays) => <button type="button" key={windowDays} aria-pressed={state.windowDays === windowDays} onClick={() => setWindowDays(windowDays)}>{windowDays} days{windowDays === 180 ? " · primary" : " · sensitivity"}</button>)}
+        </div>
+        <div className="cpap-warning"><strong>Landmark design addresses immortal-time bias—not confounding.</strong><span>The clock begins at index + {state.windowDays} days among OSA patients who remain observed and event-free. Curves are unadjusted; healthy-adherer confounding remains. “Unknown” means a device was set up but usage was not captured.</span></div>
+      </> : null}
 
       {payload ? <section className="survival-feature-summary" aria-labelledby="curve-feature-title">
         <div><span className="inspector-label">Selected outcome</span><code>PheCode {payload.metadata.feature_id}</code><h2 id="curve-feature-title">{payload.metadata.feature_name}</h2><p>{payload.metadata.category}</p></div>
         <dl>
           <div><dt>M4 Severe-vs-None HR</dt><dd>{payload.metadata.severe_hr === null ? "—" : payload.metadata.severe_hr.toFixed(2)}</dd></div>
           <div><dt>FDR-significant contrasts</dt><dd>{payload.metadata.sig_contrasts.map(contrastLabel).join(", ")}</dd></div>
-          <div><dt>Follow-up displayed</dt><dd>0–6 years</dd></div>
+          <div><dt>Follow-up displayed</dt><dd>{state.view === "severity" ? "0–6 years from index" : `0–5 years from the ${state.windowDays}-day landmark`}</dd></div>
         </dl>
         {payload.metadata.osa_control ? <p className="control-warning"><strong>Methodological control.</strong> This is the circular OSA-recoding phenotype and should not be interpreted as an incident disease finding.</p> : null}
       </section> : null}
@@ -355,31 +360,28 @@ export function SurvivalExplorer({
 
       {!loading && payload && state.view === "severity" ? <section className="survival-curve-panel" aria-labelledby="severity-curves-title">
         <div className="panel-heading"><div><span>OSA severity</span><h2 id="severity-curves-title">Cumulative incidence by sleep-study severity</h2></div><p>Reference: AHI &lt;5 (“No OSA”) within the referred cohort.</p></div>
-        <PlotlyChart data={chartSpec(severity, yMax, "severity", 520).data} layout={chartSpec(severity, yMax, "severity", 520).layout} ariaLabel={`${payload.metadata.feature_name} cumulative incidence by OSA severity`} allowImageExport={false} />
+        <PlotlyChart data={severitySpec.data} layout={severitySpec.layout} ariaLabel={`${payload.metadata.feature_name} cumulative incidence by OSA severity`} allowImageExport={false} />
         <details className="curve-table-details" open><summary>Annual cumulative-incidence values</summary><AnnualCurveTable series={severity} years={years} caption={`${payload.metadata.feature_name}: cumulative incidence percent by OSA severity`} /></details>
       </section> : null}
 
-      {!loading && payload && state.view === "cpap" ? <>
-        <section className="cpap-grid" aria-label="Cumulative incidence by recorded CPAP usage and OSA severity">
-          {panels.map(({ panel, series: panelSeries }, panelIndex) => {
-            const omitted = payload.cpap.omitted_strata.filter((item) => item.panel === panel);
-            const spec = chartSpec(panelSeries, yMax, "cpap", 380, panelIndex === 0);
-            return <article className="cpap-panel" key={panel}><div className="cpap-panel__heading"><span>{panel} OSA</span><h2>Recorded nightly CPAP use</h2></div><PlotlyChart data={spec.data} layout={spec.layout} ariaLabel={`${payload.metadata.feature_name} cumulative incidence in the ${panel} OSA panel by recorded CPAP usage`} allowImageExport={false} />{omitted.length ? <p className="omitted-note">Unavailable source stratum: {omitted.map((item) => item.group).join(", ")}. It did not meet the prespecified curve-emission criteria.</p> : null}<details className="curve-table-details"><summary>Annual values for {panel} OSA</summary><AnnualCurveTable series={panelSeries} years={years} caption={`${payload.metadata.feature_name}: ${panel} OSA panel cumulative incidence percent`} /></details></article>;
-          })}
-        </section>
-      </> : null}
+      {!loading && payload && state.view === "cpap" ? <section className="survival-curve-panel landmark-cpap-panel" aria-labelledby="cpap-curves-title">
+        <div className="panel-heading"><div><span>{state.windowDays}-day landmark · OSA patients</span><h2 id="cpap-curves-title">Cumulative incidence by CPAP adherence</h2></div><p>{state.windowDays === 180 ? "Primary landmark: the adherence window is closed for most participants." : "Sensitivity landmark: adherence classification is sparser and should be read cautiously."}</p></div>
+        <PlotlyChart data={cpapSpec.data} layout={cpapSpec.layout} ariaLabel={`${payload.metadata.feature_name} cumulative incidence by CPAP adherence from the ${state.windowDays}-day landmark`} allowImageExport={false} />
+        {payload.cpap.omitted_strata.filter((item) => item.window_days === state.windowDays).length ? <p className="omitted-note">Unavailable source strata: {payload.cpap.omitted_strata.filter((item) => item.window_days === state.windowDays).map((item) => item.group).join(", ")}. Missing strata were not emitted by the aggregate source and do not indicate zero incidence.</p> : null}
+        <details className="curve-table-details" open><summary>Annual cumulative-incidence values</summary><AnnualCurveTable series={landmarkCpap} years={years} caption={`${payload.metadata.feature_name}: cumulative incidence percent by CPAP adherence from the ${state.windowDays}-day landmark`} /></details>
+      </section> : null}
 
       <section className="curve-notes" aria-labelledby="curve-notes-title">
         <div><span className="section-kicker">How to read this view</span><h2 id="curve-notes-title">Curve context stays attached</h2></div>
         <div className="curve-note-grid">
           <article><strong>Selected outcomes</strong><p>Only PheCodes FDR-significant in at least one M4 OSA-severity contrast are shown. The curves are post-selection descriptions, not independent validation.</p></article>
-          <article><strong>Source threshold</strong><p>Curves were emitted only for strata with at least 20 participants at baseline and at least 5 incident events. A missing stratum is unavailable, not zero incidence.</p></article>
-          <article><strong>Disclosure status</strong><p>Exact monthly at-risk and cumulative-event cells, uncertainty bands, and downloads are unavailable. Count arrays remain outside the browser bundle pending disclosure review.</p></article>
-          <article><strong>Follow-up horizon</strong><p>Follow-up ends May 31, 2023. Curves are displayed to six years; later tails may be supported by thinner risk sets.</p></article>
+          <article><strong>Source threshold</strong><p>Severity curves contain at least 20 participants and 5 incident events per stratum; landmark curves contain at least 20 and 3. A missing stratum is unavailable, not zero incidence.</p></article>
+          <article><strong>Disclosure status</strong><p>Aggregate cumulative-incidence percentages are public. Exact monthly at-risk and cumulative-event cells, uncertainty bands, and curve downloads remain outside the browser bundle.</p></article>
+          <article><strong>Follow-up horizon</strong><p>Follow-up ends May 31, 2023. Severity curves extend six years from index; landmark curves extend five years from index plus the selected grace period.</p></article>
         </div>
       </section>
 
-      <p className="research-preview-note">Private research preview. Cumulative incidence is an observed absolute-risk summary within a sleep-clinic referral cohort and should not be interpreted as an adjusted effect, a causal contrast, or population OSA prevalence.</p>
+      <p className="research-preview-note">Public research release. Cumulative incidence is an observed absolute-risk summary within a sleep-clinic referral cohort and should not be interpreted as an adjusted effect, a causal contrast, or population OSA prevalence.</p>
     </main>
   );
 }

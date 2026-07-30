@@ -7,10 +7,6 @@ export type SurvivalManifestFeature = {
   osa_control: boolean;
 };
 
-export type CommonReference =
-  | string
-  | { group?: string; label?: string; severity_group?: string };
-
 export type SurvivalManifest = {
   schema_version: number;
   exporter_version: string;
@@ -19,13 +15,13 @@ export type SurvivalManifest = {
     feature_id: string;
     view: "severity" | "cpap";
     feature_path: string;
+    window_days: 90 | 180;
   };
   analysis: Record<string, unknown>;
   strata: {
     severity_group_order: string[];
-    cpap_panel_order: string[];
+    cpap_window_order: Array<90 | 180>;
     cpap_group_order: string[];
-    cpap_common_reference: CommonReference;
   };
   disclosure: {
     counts_disclosure_status: string;
@@ -58,6 +54,10 @@ export type SurvivalFeaturePayload = {
     follow_up_end: string;
     curve_inclusion: Record<string, unknown>;
     table_time_years: number[];
+    cpap_table_time_years: number[];
+    cpap_default_window_days: 90 | 180;
+    cpap_time_origin: string;
+    cpap_interpretation: string;
     release_status: string;
     release_note: string;
     counts_disclosure_status: string;
@@ -66,10 +66,8 @@ export type SurvivalFeaturePayload = {
   };
   strata: {
     severity_group_order: string[];
-    cpap_panel_order: string[];
+    cpap_window_order: Array<90 | 180>;
     cpap_group_order: string[];
-    cpap_common_reference?: CommonReference;
-    common_reference?: CommonReference;
     [key: string]: unknown;
   };
   severity: {
@@ -82,9 +80,9 @@ export type SurvivalFeaturePayload = {
   };
   cpap: {
     row_count: number;
-    omitted_strata: Array<{ panel: string; group: string; reason: string }>;
+    omitted_strata: Array<{ window_days: 90 | 180; group: string; reason: string }>;
     columns: {
-      panel: string[];
+      window_days: Array<90 | 180>;
       group: string[];
       time_years: number[];
       cif_pct: number[];
@@ -120,7 +118,7 @@ export async function fetchSurvivalManifest(): Promise<SurvivalManifest> {
   if (!response.ok) throw new Error(`Curve index is unavailable (${response.status}).`);
   const payload = await response.json() as SurvivalManifest;
   if (
-    payload.schema_version !== 1 ||
+    payload.schema_version !== 2 ||
     !Array.isArray(payload.features) ||
     !payload.defaults?.feature_id ||
     !payload.strata ||
@@ -140,7 +138,7 @@ export async function fetchSurvivalFeature(
   const response = await fetch(safeDataUrl(feature.path));
   if (!response.ok) throw new Error(`Curve data are unavailable (${response.status}).`);
   const payload = await response.json() as SurvivalFeaturePayload;
-  if (payload.schema_version !== 1 || payload.metadata?.feature_id !== feature.feature_id) {
+  if (payload.schema_version !== 2 || payload.metadata?.feature_id !== feature.feature_id) {
     throw new Error("Curve data do not match the selected feature.");
   }
   assertAlignedColumns(
@@ -148,11 +146,6 @@ export async function fetchSurvivalFeature(
     payload.severity.row_count,
     payload.severity.columns,
   );
-  assertAlignedColumns("CPAP curves", payload.cpap.row_count, payload.cpap.columns);
+  assertAlignedColumns("Landmark CPAP curves", payload.cpap.row_count, payload.cpap.columns);
   return payload;
-}
-
-export function commonReferenceLabel(reference: CommonReference | undefined) {
-  if (typeof reference === "string") return reference;
-  return reference?.severity_group ?? reference?.group ?? reference?.label ?? "No OSA";
 }

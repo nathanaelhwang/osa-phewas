@@ -6,7 +6,8 @@ Incidence PheDAS, LabWAS, MedWAS, BehWAS, ProcWAS, and UtilWAS. Every
 non-disease family carries its archived, preliminary, or review status in the
 interface. Incidence PheDAS also includes interactive Aalen–Johansen cumulative-
 incidence curves for its FDR-selected outcomes, stratified by OSA severity and
-recorded CPAP usage.
+landmark CPAP adherence designed to address immortal-time bias. A dedicated Phenotypes section
+describes eight cross-domain octants and their incident-outcome curves.
 
 The primary presentation is **M4 / Severe vs None**. “None” means AHI `<5`
 within the sleep-clinic referral cohort.
@@ -24,7 +25,8 @@ Open `http://localhost:3000`. Key routes are:
 
 - `/` — atlas overview and feature search
 - `/explore` — interactive Manhattan, volcano, and table views
-- `/survival` — cumulative-incidence curves by OSA severity or recorded CPAP usage
+- `/phenotypes` — octant construction, clinical signatures, and phenotype-exposure survival findings
+- `/survival` — cumulative-incidence curves by OSA severity or landmark CPAP adherence
 - `/was` — estimand-separated laboratory, medication, behavior, procedure, and utilization scans
 - `/feature?code=401.1` — combined disease evidence for a PheCode, or a namespaced non-disease feature report
 - `/methods` — methods, interpretation, and release status
@@ -51,20 +53,17 @@ Regenerate the disease and non-disease payloads with:
 python .\scripts\export_disease_data.py
 python .\scripts\export_multiwas_data.py
 python .\scripts\export_survival_data.py
+python .\scripts\export_phenotype_data.py
 ```
 
 See [scripts/README.md](scripts/README.md) for the exporter contract. The
 exporter fails closed on unexpected or identifier-like columns and never emits
 patient-level data.
 
-## Release gate
+## Public release scope
 
-This is a local research preview. Prevalence PheDAS does not currently include
-cases and non-cases for each PheCode within the OSA severity or contrast groups.
-Overall analytic N cannot identify a rare outcome cell or support complementary
-disclosure checks. A version-matched count companion and institution-approved
-suppression decision are required before publishing the data files or enabling
-downloads. Several other families also have only overall feature counts rather
-than the complete exposure-by-outcome cells, so the same release gate applies.
-The survival exporter validates monthly at-risk and event arrays internally but
-does not copy them into browser JSON while disclosure policy remains pending.
+This is an IRB-approved public research release of aggregate results and
+publication figures. Exact exposure-by-outcome cells remain unavailable for
+several WAS families, so the interface does not infer them or enable raw result
+downloads. The survival exporter validates monthly at-risk and event arrays
+internally but intentionally omits those count arrays from browser JSON.

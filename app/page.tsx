@@ -22,7 +22,7 @@ export default function Home() {
           <div className="hero__grid">
             <div>
               <h1>How is obstructive sleep apnea associated with the clinical phenome?</h1>
-              <p className="hero__lede">Explore adjusted relationships between OSA severity and diseases, laboratory patterns, medication fills, EHR-derived behaviors, procedures, and healthcare use in a sleep-clinic referral cohort.</p>
+              <p className="hero__lede">Explore adjusted relationships between OSA severity or cross-domain phenotypes and diseases, laboratory patterns, medication fills, EHR-derived behaviors, procedures, and healthcare use in a sleep-clinic referral cohort.</p>
             </div>
             <aside className="hero__note" aria-label="Primary analysis settings">
               <span>Primary presentation</span>
@@ -48,19 +48,29 @@ export default function Home() {
               <b aria-hidden="true">→</b>
             </Link>
           </div>
-          <div className="entry-followup">
-            <div>
-              <span className="section-kicker">Survival analysis</span>
-              <h3>Trace cumulative incidence after index</h3>
-              <p>Explore Aalen–Johansen curves for FDR-selected incident outcomes by OSA severity or recorded CPAP usage.</p>
+          <div className="entry-followup-grid">
+            <div className="entry-followup">
+              <div>
+                <span className="section-kicker">Phenotype taxonomy</span>
+                <h3>Explore eight octant phenotypes</h3>
+                <p>See how physiologic severity, symptoms, and comorbidity burden combine—and how the octants relate to incident outcomes.</p>
+              </div>
+              <Link href="/phenotypes">Explore phenotypes →</Link>
             </div>
-            <Link href="/survival?code=401.1&amp;view=severity">Explore incidence curves →</Link>
+            <div className="entry-followup">
+              <div>
+                <span className="section-kicker">Survival analysis</span>
+                <h3>Trace cumulative incidence after index</h3>
+                <p>Explore Aalen–Johansen curves by OSA severity or landmark CPAP adherence designed to address immortal-time bias.</p>
+              </div>
+              <Link href="/survival?code=401.1&amp;view=severity">Explore incidence curves →</Link>
+            </div>
           </div>
         </section>
 
         <section className="atlas-index page-shell" aria-labelledby="atlas-index-title">
           <div className="section-kicker">Atlas index</div>
-          <h2 id="atlas-index-title">One exposure, seven clinical lenses</h2>
+          <h2 id="atlas-index-title">Seven clinical lenses on OSA severity</h2>
           <div className="index-table" role="table" aria-label="Analysis family release index">
             <div className="index-row index-row--head" role="row">
               <span role="columnheader">Analysis</span><span role="columnheader">Question</span><span role="columnheader">Primary measure</span><span role="columnheader">Status</span>
