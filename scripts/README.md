@@ -54,6 +54,50 @@ does not reconstruct or infer missing exposure-by-outcome cells. LabWAS,
 MedWAS, and ProcWAS are marked as archived snapshots, BehWAS as preliminary
 archived results, and UtilWAS as archived results pending review.
 
+## Aggregate QWAS data export
+
+After the multi-WAS export has created `was-manifest.json` and
+`was-features.json`, add the owner-approved questionnaire-wide association
+study with:
+
+```powershell
+python .\scripts\export_multiwas_data.py
+python .\scripts\export_qwas_data.py
+```
+
+This order is required. The QWAS exporter validates and augments the existing
+multi-WAS manifest and feature registry rather than replacing them. If the
+multi-WAS export is rerun, rerun the QWAS exporter before validation or
+deployment.
+
+The exporter has no source-path option and reads only two fixed aggregate or
+metadata inputs: `results/qwas_results/analysis/results.csv` and
+`results/qwas_results/targets/feature_spec.csv`. It never reads the target
+matrix, questionnaire-wide patient records, or other patient-level files.
+Publication fails closed unless `scripts/qwas_release_approval.json` approves
+public release and its SHA-256 hashes match both inputs.
+
+QWAS is split into two homogeneous, index-anchored analyses using the closest
+questionnaire on or before the sleep-study index:
+
+- `qwas_binary` reports odds ratios for binary questionnaire responses.
+- `qwas_continuous` reports rank-inverse-normal standard-deviation betas for
+  ordinal or continuous responses.
+
+Both analyses publish source-defined M1–M4 results across omnibus, trend,
+severity-versus-none, and AHI-threshold contrasts; source `unadjusted` rows are
+excluded. Outputs are 56 partitions under
+`public/data/was/{analysis_id}/index/{model}/{contrast}.json`, plus QWAS entries
+in the shared manifest and feature registry.
+
+Interpret these as cross-sectional, itemwise complete-case associations in the
+questionnaire-eligible referral cohort. The per-feature `n` is the answered
+sample supplied to the source formula, not a model-specific fitted count after
+adjustment-covariate missingness. Referral-driving items are explicitly flagged
+because ascertainment may contribute to their associations. Instrument-item
+concept labels are provisional where validated public question wording was not
+available; the feature code remains visible for auditability.
+
 Publish the separately approved, descriptive UtilWAS utilization profile after
 the multi-WAS manifest exists:
 

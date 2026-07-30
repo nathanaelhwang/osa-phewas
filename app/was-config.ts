@@ -4,6 +4,7 @@ export const WAS_FAMILIES = [
   "behwas",
   "procwas",
   "utilwas",
+  "qwas",
 ] as const;
 
 export const WAS_ANALYSIS_IDS = [
@@ -18,6 +19,8 @@ export const WAS_ANALYSIS_IDS = [
   "utilwas_presence",
   "utilwas_count_present",
   "utilwas_specialty_rate",
+  "qwas_binary",
+  "qwas_continuous",
 ] as const;
 
 export const WAS_VIEWS = ["manhattan", "volcano", "forest", "table"] as const;
@@ -45,6 +48,7 @@ export const WAS_FAMILY_LABELS: Record<WasFamily, string> = {
   behwas: "BehWAS",
   procwas: "ProcWAS",
   utilwas: "UtilWAS",
+  qwas: "QWAS",
 };
 
 export const WAS_FAMILY_DESCRIPTIONS: Record<WasFamily, string> = {
@@ -53,6 +57,7 @@ export const WAS_FAMILY_DESCRIPTIONS: Record<WasFamily, string> = {
   behwas: "Preliminary EHR-derived behavioral features, separated by outcome type.",
   procwas: "Procedure-rate associations within the defined observation window.",
   utilwas: "Healthcare-use presence, counts, and specialty rates as distinct estimands.",
+  qwas: "Index-anchored sleep-questionnaire responses, separated by binary and continuous form.",
 };
 
 export const WAS_ANALYSES: Record<WasAnalysisId, WasAnalysisConfig> = {
@@ -166,6 +171,26 @@ export const WAS_ANALYSES: Record<WasAnalysisId, WasAnalysisConfig> = {
     defaultView: "manhattan",
     codeLabel: "Specialty feature",
   },
+  qwas_binary: {
+    id: "qwas_binary",
+    family: "qwas",
+    label: "QWAS · binary questionnaire response",
+    shortLabel: "Binary responses",
+    question: "Which positive or worse questionnaire response states differ with OSA severity?",
+    defaultWindow: "index",
+    defaultView: "manhattan",
+    codeLabel: "Questionnaire item",
+  },
+  qwas_continuous: {
+    id: "qwas_continuous",
+    family: "qwas",
+    label: "QWAS · ordinal or continuous response",
+    shortLabel: "Continuous responses",
+    question: "How do rank-normalized questionnaire responses differ with OSA severity?",
+    defaultWindow: "index",
+    defaultView: "manhattan",
+    codeLabel: "Questionnaire item",
+  },
 };
 
 export const WAS_FAMILY_DEFAULT_ANALYSIS: Record<WasFamily, WasAnalysisId> = {
@@ -174,6 +199,7 @@ export const WAS_FAMILY_DEFAULT_ANALYSIS: Record<WasFamily, WasAnalysisId> = {
   behwas: "behwas_binary",
   procwas: "procwas_rate",
   utilwas: "utilwas_presence",
+  qwas: "qwas_binary",
 };
 
 export function analysesForFamily(family: WasFamily) {

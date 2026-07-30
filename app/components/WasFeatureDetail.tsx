@@ -95,7 +95,7 @@ async function loadAnalysisEvidence(
   const analysisWindows = unique(candidates.map((partition) => partition.window));
   const featureWindows = feature.windows.filter((value) => analysisWindows.includes(value));
   const windows = featureWindows.length ? featureWindows : analysisWindows;
-  const window = preferredValue(windows, requestedWindow, ["1yr", "all", "lifetime", "5yr"]);
+  const window = preferredValue(windows, requestedWindow, ["index", "1yr", "all", "lifetime", "5yr"]);
   const windowPartitions = candidates.filter((partition) => partition.window === window);
   const contrasts = unique(windowPartitions.map((partition) => partition.contrast));
   const contrast = preferredValue(contrasts, requestedContrast, ["severe_vs_none", "trend", "omnibus"]);
@@ -182,6 +182,7 @@ function contrastLabel(contrast: string) {
 }
 
 function windowLabel(window: string) {
+  if (window === "index") return "Closest questionnaire on or before index";
   if (window === "1yr") return "1 year pre-index";
   if (window === "5yr") return "5 years pre-index";
   if (window === "lifetime") return "Available lifetime history";
@@ -219,6 +220,9 @@ function familyQcNote(family: WasFamily) {
   }
   if (family === "utilwas") {
     return "Utilization subgroups can overlap. Interpret each estimand separately and do not add counts across utilization families.";
+  }
+  if (family === "qwas") {
+    return "QWAS is cross-sectional and itemwise complete-case. Binary odds ratios and rank-normalized continuous betas are separate estimands; referral-driving items may also reflect ascertainment.";
   }
   return "Each block preserves its source estimand and effect scale; estimates are not pooled across analyses.";
 }
@@ -350,7 +354,7 @@ export function WasFeatureDetail({
       </section>
 
       <section className="was-feature-controls" aria-label="Preferred evidence dimensions">
-        <div><span>Primary presentation</span><strong>M4 · Severe vs None · 1 year where available</strong></div>
+        <div><span>Primary presentation</span><strong>M4 · Severe vs None · family-specific index or window</strong></div>
         <label>Preferred window
           <select value={preferredWindow} onChange={(event) => setPreferredWindow(event.target.value)}>
             {!windows.includes(preferredWindow) ? <option value={preferredWindow}>{windowLabel(preferredWindow)} (fallback where unavailable)</option> : null}
@@ -366,7 +370,7 @@ export function WasFeatureDetail({
       </section>
 
       {feature?.label_review_required ? (
-        <p className="quality-warning was-feature-global-warning">This display label was mechanically derived and requires domain review before public release.</p>
+        <p className="quality-warning was-feature-global-warning">This conservative concept label remains under domain review; the source feature code is retained alongside it.</p>
       ) : null}
       {error ? <p className="plot-error" role="alert">{error}</p> : null}
       {loading ? <div className="plot-loading" role="status">Loading aggregate evidence…</div> : null}
@@ -382,7 +386,7 @@ export function WasFeatureDetail({
       {feature ? (
         <section className="was-feature-footnotes" aria-label="Interpretation and disclosure notes">
           <article><span>Family-specific QC</span><h2>Read within the source analysis</h2><p>{familyQcNote(feature.family)}</p></article>
-          <article><span>Count interpretation</span><h2>Counts are not contrast cells</h2><p>Displayed counts are model-specific analytic N or overall feature-positive totals. They are not OSA exposure-by-outcome cells and are not used to infer suppressed subgroup counts.</p></article>
+          <article><span>Count interpretation</span><h2>Counts are not contrast cells</h2><p>{feature.family === "qwas" ? "Displayed counts are itemwise answered N supplied to the source formula. They can exceed the fitted N after covariate missingness and are not OSA-by-response cells." : "Displayed counts are model-specific analytic N or overall feature-positive totals. They are not OSA exposure-by-outcome cells and are not used to infer suppressed subgroup counts."}</p></article>
           <article><span>Research interpretation</span><h2>Association, not causation</h2><p>Results come from a sleep-clinic referral cohort. They do not estimate population prevalence and do not establish causal, protective, or independent effects.</p></article>
         </section>
       ) : null}
@@ -398,6 +402,7 @@ function EstimandBlock({ feature, evidence }: { feature: WasFeatureRecord; evide
     ...evidence.warnings,
     ...(metadata?.qc_warnings ?? []),
     ...(row?.unstable ? [`Estimate flagged as unstable${row.unstable_reason ? `: ${row.unstable_reason}` : "."}`] : []),
+    ...(row?.referral_item ? ["Ascertainment-sensitive item: this response can help drive sleep-study referral, so the association may partly reflect the referral pathway."] : []),
   ]);
   return (
     <article className="was-feature-estimand">

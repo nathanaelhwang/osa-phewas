@@ -95,6 +95,8 @@ const wasAnalyses = [
   "utilwas_presence",
   "utilwas_count_present",
   "utilwas_specialty_rate",
+  "qwas_binary",
+  "qwas_continuous",
 ];
 
 function manifestAnalysisId(analysis) {
@@ -155,9 +157,28 @@ test("server-renders the researcher-facing atlas home", async () => {
   assert.match(text, /M4\s*[Â··]\s*Severe vs None/i);
   assert.match(text, /sleep-clinic referral cohort/i);
   assert.match(text, /do not estimate population OSA prevalence or establish causality/i);
-  assert.match(text, /Search diseases, labs, medications, behaviors, procedures, and utilization/i);
+  assert.match(text, /Search diseases, labs, medications, behaviors, procedures, utilization, and questionnaires/i);
+  assert.match(text, /Eight clinical lenses on OSA severity/i);
+  assert.match(text, /QWAS/i);
+  assert.match(text, /questionnaire responses/i);
+  assert.match(html, /href=["']\/was\?family=qwas&amp;analysis=qwas_binary["']/i);
   assert.match(html, /href=["']\/survival\?code=401\.1&amp;view=severity["']/i);
   assert.match(html, /href=["']\/phenotypes["']/i);
+  assertNoStarterPreview(html);
+});
+
+test("server-renders QWAS methods with its selection, coding, and ascertainment limits", async () => {
+  const html = await render("/methods");
+  const text = visibleText(html);
+
+  assert.match(text, /QWAS/i);
+  assert.match(text, /closest questionnaire on or before (?:the )?sleep-study index/i);
+  assert.match(text, /74,061/i);
+  assert.match(text, /itemwise complete-case/i);
+  assert.match(text, /odds ratio/i);
+  assert.match(text, /rank-inverse-normal/i);
+  assert.match(text, /referral.*ascertainment|ascertainment.*referral/i);
+  assert.match(html, /href=["']\/was\?family=qwas&amp;analysis=qwas_binary[^"']*["']/i);
   assertNoStarterPreview(html);
 });
 
@@ -343,6 +364,28 @@ test("server-renders the generic cross-domain feature route", async () => {
   assertNoStarterPreview(html);
 });
 
+test("server-renders a QWAS questionnaire feature route", async () => {
+  const registry = await readJson("was-features.json");
+  const index = registry.columns.feature_id.findIndex(
+    (featureId, rowIndex) => featureId === "STOP1" && registry.columns.family[rowIndex] === "qwas",
+  );
+  assert.ok(index >= 0, "the registry must contain the QWAS STOP1 referral item");
+  const featureKey = registry.columns.feature_key[index];
+  assert.ok(registry.columns.analysis_ids[index].includes("qwas_binary"));
+
+  const html = await render(
+    `/feature?family=qwas&key=${encodeURIComponent(featureKey)}&window=index&contrast=severe_vs_none`,
+  );
+  const text = visibleText(html);
+
+  assert.match(text, /Cross-domain feature/i);
+  assert.match(text, /Other WAS analyses/i);
+  assert.match(text, /QWAS/i);
+  assert.match(text, /STOP1/i);
+  assert.doesNotMatch(text, /Prevalence PheDAS Odds ratio/i);
+  assertNoStarterPreview(html);
+});
+
 for (const route of [
   {
     family: "labwas",
@@ -386,10 +429,27 @@ for (const route of [
     question: /among people with use.*utilization counts differ/i,
     view: "Manhattan",
   },
+  {
+    family: "qwas",
+    analysis: "qwas_binary",
+    label: /QWAS.*binary questionnaire response/i,
+    question: /positive or worse questionnaire response states differ/i,
+    view: "Manhattan",
+    window: "index",
+  },
+  {
+    family: "qwas",
+    analysis: "qwas_continuous",
+    label: /QWAS.*ordinal or continuous response/i,
+    question: /rank-normalized questionnaire responses differ/i,
+    view: "Manhattan",
+    window: "index",
+  },
 ]) {
   test(`server-renders the ${route.analysis} WAS explorer state`, async () => {
+    const window = route.window ?? "1yr";
     const html = await render(
-      `/was?family=${route.family}&analysis=${route.analysis}&window=1yr&model=m4&contrast=severe_vs_none`,
+      `/was?family=${route.family}&analysis=${route.analysis}&window=${window}&model=m4&contrast=severe_vs_none`,
     );
     const text = visibleText(html);
 
@@ -414,6 +474,9 @@ for (const route of [
       assert.match(text, /1-year pre-index/i);
     } else {
       assert.doesNotMatch(text, /Utilization profile/i);
+    }
+    if (route.family === "qwas") {
+      assert.match(text, /Closest pre-index questionnaire/i);
     }
     assertNoStarterPreview(html);
   });
@@ -1011,6 +1074,10 @@ test("WAS manifest and every partition preserve estimand and release boundaries"
     assert.ok(columns.feature_key.every((value) => typeof value === "string" && value.length > 0));
     assert.ok(columns.feature_id.every((value) => typeof value === "string"));
     assert.ok(columns.effect_type.every((value) => value === metadata.effect_type));
+    if (metadata.family === "qwas") {
+      assertColumnLengths(columns, ["referral_item"], rowCount);
+      assert.ok(columns.referral_item.every((value) => typeof value === "boolean"));
+    }
 
     const effectType = metadata.effect_type.toLowerCase();
     const effectScale = metadata.effect_scale.toLowerCase();
@@ -1075,6 +1142,8 @@ test("WAS manifest and every partition preserve estimand and release boundaries"
     utilwas_presence: "or",
     utilwas_count_present: "irr",
     utilwas_specialty_rate: "irr",
+    qwas_binary: "or",
+    qwas_continuous: "beta",
   };
   for (const [analysisId, expected] of Object.entries(expectedEffectTypes)) {
     const observed = new Set(
@@ -1085,7 +1154,12 @@ test("WAS manifest and every partition preserve estimand and release boundaries"
     assert.deepEqual([...observed], [expected], `${analysisId} estimand changed`);
   }
 
-  for (const analysisId of ["labwas_mean", "labwas_median", "behwas_continuous"]) {
+  for (const analysisId of [
+    "labwas_mean",
+    "labwas_median",
+    "behwas_continuous",
+    "qwas_continuous",
+  ]) {
     const observed = new Set(
       loaded
         .filter(({ metadata }) => metadata.analysis_id === analysisId && metadata.directional)
@@ -1098,11 +1172,108 @@ test("WAS manifest and every partition preserve estimand and release boundaries"
     );
   }
 
+  const qwasPartitions = loaded.filter(({ metadata }) => metadata.family === "qwas");
+  assert.equal(qwasPartitions.length, 56);
+  assert.equal(
+    qwasPartitions.reduce((sum, { metadata }) => sum + metadata.row_count, 0),
+    3_696,
+  );
+  assert.equal(
+    new Set(qwasPartitions.map(({ metadata }) =>
+      `${metadata.analysis_id}|${metadata.window}|${metadata.model}|${metadata.contrast}`
+    )).size,
+    56,
+  );
+
+  const expectedQwasContrasts = [
+    "ahi_ge15",
+    "ahi_ge5",
+    "mild_vs_none",
+    "moderate_vs_none",
+    "omnibus",
+    "severe_vs_none",
+    "trend",
+  ];
+  const qwasSpecifications = {
+    qwas_binary: {
+      featureCount: 83,
+      rowCount: 2_324,
+      directionalEffect: "OR",
+      directionalScale: "odds ratio",
+      omnibusEffect: "wald_chi2",
+      omnibusScale: "Wald chi-square statistic",
+    },
+    qwas_continuous: {
+      featureCount: 49,
+      rowCount: 1_372,
+      directionalEffect: "beta",
+      directionalScale: "rank-inverse-normal standard-deviation beta",
+      omnibusEffect: "wald_F",
+      omnibusScale: "Wald F statistic",
+    },
+  };
+  for (const [analysisId, specification] of Object.entries(qwasSpecifications)) {
+    const partitions = qwasPartitions.filter(
+      ({ metadata }) => metadata.analysis_id === analysisId,
+    );
+    assert.equal(partitions.length, 28);
+    assert.equal(
+      partitions.reduce((sum, { metadata }) => sum + metadata.row_count, 0),
+      specification.rowCount,
+    );
+    assert.ok(partitions.every(({ metadata }) => metadata.row_count === specification.featureCount));
+    assert.deepEqual([...new Set(partitions.map(({ metadata }) => metadata.window))], ["index"]);
+    assert.deepEqual(
+      [...new Set(partitions.map(({ metadata }) => metadata.model))].sort(),
+      ["M1", "M2", "M3", "M4"],
+    );
+    assert.deepEqual(
+      [...new Set(partitions.map(({ metadata }) => metadata.contrast))].sort(),
+      expectedQwasContrasts,
+    );
+
+    const directional = partitions.filter(({ metadata }) => metadata.directional);
+    const omnibus = partitions.filter(({ metadata }) => !metadata.directional);
+    assert.equal(directional.length, 24);
+    assert.equal(omnibus.length, 4);
+    assert.ok(directional.every(({ metadata }) =>
+      metadata.effect_type === specification.directionalEffect &&
+      metadata.effect_scale === specification.directionalScale
+    ));
+    assert.ok(omnibus.every(({ metadata }) =>
+      metadata.contrast === "omnibus" &&
+      metadata.effect_type === specification.omnibusEffect &&
+      metadata.effect_scale === specification.omnibusScale &&
+      metadata.neutral_value === 0
+    ));
+  }
+
+  const referralItems = new Set();
+  let underflowRows = 0;
+  for (const { partition, columns } of qwasPartitions) {
+    columns.feature_id.forEach((featureId, index) => {
+      if (columns.referral_item[index]) referralItems.add(featureId);
+      if (columns.p[index] !== 0) return;
+      underflowRows += 1;
+      assert.ok(
+        Number.isFinite(columns.neglog10p[index]) && columns.neglog10p[index] >= 0,
+        `${partition.path}: p=0 must retain a finite -log10(p) value`,
+      );
+    });
+  }
+  assert.ok(underflowRows > 0, "QWAS must exercise the p-value underflow display path");
+  assert.deepEqual(
+    [...referralItems].sort(),
+    ["CC_SNORING_APNEA", "GASP", "STOP1", "STOP3"],
+  );
+
   const warningAnalyses = new Set([
     "behwas_binary",
     "behwas_continuous",
     "procwas_rate",
     "utilwas_specialty_rate",
+    "qwas_binary",
+    "qwas_continuous",
   ]);
   for (const { metadata, partition } of loaded) {
     if (!warningAnalyses.has(metadata.analysis_id)) continue;
@@ -1245,10 +1416,36 @@ test("cross-domain feature registry is aligned, namespaced, and searchable", asy
   assert.ok(columns.label_review_required.every((value) => typeof value === "boolean"));
   assert.deepEqual(
     [...new Set(columns.family)].sort(),
-    ["behwas", "labwas", "medwas", "procwas", "utilwas"],
+    ["behwas", "labwas", "medwas", "procwas", "qwas", "utilwas"],
   );
   assert.ok(
     columns.family.some((family, index) => family === "medwas" && /^0\d+/.test(columns.feature_id[index])),
     "registry must retain a zero-padded medication identifier",
   );
+
+  const qwasIndices = columns.family.flatMap((family, index) =>
+    family === "qwas" ? [index] : []
+  );
+  assert.equal(qwasIndices.length, 92);
+  assert.equal(
+    qwasIndices.filter((index) => columns.analysis_ids[index].includes("qwas_binary")).length,
+    83,
+  );
+  assert.equal(
+    qwasIndices.filter((index) => columns.analysis_ids[index].includes("qwas_continuous")).length,
+    49,
+  );
+  assert.equal(
+    qwasIndices.filter((index) =>
+      columns.analysis_ids[index].includes("qwas_binary") &&
+      columns.analysis_ids[index].includes("qwas_continuous")
+    ).length,
+    40,
+  );
+  assert.equal(new Set(qwasIndices.map((index) => columns.feature_id[index])).size, 92);
+  assert.ok(qwasIndices.every((index) => columns.feature_key[index].startsWith("qwas:")));
+  assert.ok(qwasIndices.every((index) => columns.code_system[index] === "Questionnaire item"));
+  assert.ok(qwasIndices.every((index) =>
+    columns.windows[index].length === 1 && columns.windows[index][0] === "index"
+  ));
 });

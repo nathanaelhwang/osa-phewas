@@ -105,6 +105,7 @@ export type WasDetailAssociationRow = {
   n: number | null;
   n_secondary: number | null;
   prevalence: number | null;
+  referral_item: boolean;
 };
 
 export type WasDetailPartition = {
@@ -372,6 +373,7 @@ function wasDetailRowsFromColumns(columns: Record<string, unknown[]>): WasDetail
     n: toNullableNumber(columns.n?.[index]),
     n_secondary: toNullableNumber(columns.n_secondary?.[index]),
     prevalence: toNullableNumber(columns.prevalence?.[index]),
+    referral_item: toBoolean(columns.referral_item?.[index]),
   }));
 }
 

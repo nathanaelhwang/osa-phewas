@@ -22,6 +22,7 @@ const releaseRoadmap = [
   ["LabWAS", "Values, ordering propensity, and ordering rate", "Archived snapshot"],
   ["MedWAS", "Medication fills · OR", "Archived snapshot"],
   ["BehWAS", "EHR-derived behaviors · OR or β", "Preliminary archived"],
+  ["QWAS", "Index-anchored questionnaire responses · OR or β", "Research preview"],
   ["ProcWAS", "Procedure rates · IRR", "Archived snapshot"],
   ["UtilWAS", "Healthcare-use presence and counts", "Archived review"],
 ];
@@ -30,6 +31,7 @@ const otherFamilies = [
   ["LabWAS", "β / OR / IRR", "Mean and median value betas use rank-inverse-normal standard-deviation units and condition on being tested. Ordering propensity and ordering rate remain separate extensive and intensive signals."],
   ["MedWAS", "OR", "Binary ever-filled medication classes use zero-preserved GPI-4 codes. Fallback class labels remain visibly marked for review."],
   ["BehWAS", "OR or β", "Binary and rank-inverse-normal standardized continuous representations remain on separate axes. This small curated scan is preliminary and forest-first."],
+  ["QWAS", "OR or β", "Binary positive-or-worse response states use logistic odds ratios; continuous and ordinal responses use rank-inverse-normal betas. Both are itemwise complete-case and index-anchored."],
   ["ProcWAS", "IRR", "Procedure counts are annualized rates over one- and five-year pre-index windows; sleep-study and PAP-pathway procedures were excluded."],
   ["UtilWAS", "OR / IRR", "Presence and count among present are a two-part analysis. Physician and allied-health definitions must not be summed while their overlap rule remains under review."],
 ];
@@ -106,6 +108,60 @@ export default function MethodsPage() {
             shown in separate views and should not be compared as though they
             were the same estimand.
           </p>
+        </section>
+
+        <section className="evidence-section" aria-labelledby="qwas-methods-title">
+          <div className="section-heading">
+            <div>
+              <span>Questionnaire-wide association study</span>
+              <h2 id="qwas-methods-title">Questionnaire responses anchored to the sleep-study index</h2>
+            </div>
+            <p>QWAS asks how questionnaire responses vary with OSA severity within the referred cohort.</p>
+          </div>
+          <div className="definition-grid">
+            <article>
+              <span>Study frame</span>
+              <h2>74,061 pre-index questionnaires</h2>
+              <p>
+                The analysis selects the closest questionnaire on or before the
+                sleep-study index for each participant. It is cross-sectional, not a
+                one- or five-year longitudinal window, and no selection weighting
+                was applied for questionnaire availability.
+              </p>
+            </article>
+            <article>
+              <span>Two response forms</span>
+              <h2>83 binary · 49 continuous</h2>
+              <p>
+                Binary positive-or-worse response states use logistic odds ratios.
+                Ordinal and continuous responses are rank-inverse-normalized before
+                linear modeling and report standardized betas. The 92 unique items
+                include 40 represented in both forms; the two scales never share an axis.
+              </p>
+            </article>
+            <article>
+              <span>Adjustment ladder</span>
+              <h2>M4 adds BMI</h2>
+              <p>
+                M1 includes the OSA exposure; M2 adds age, sex, race/ethnicity, and
+                study year; M3 adds smoking, income, and observation window; M4 adds
+                BMI. The AHI below 5 reference remains a symptomatic referral group,
+                not a population control.
+              </p>
+            </article>
+          </div>
+          <p className="method-callout">
+            Models are complete-case for each item. Displayed N is the answered sample
+            supplied to the source formula and can exceed the fitted N after covariate
+            missingness. FDR and Bonferroni flags are calculated within contrast, model,
+            and effect type. STOP1, STOP3, GASP, and the snoring/apnea chief-complaint item
+            are flagged because they can help drive referral, making ascertainment part
+            of their observed association. Numbered instrument labels are conservative
+            concepts rather than verbatim questionnaire text and remain under review.
+          </p>
+          <Link className="primary-link" href="/was?family=qwas&amp;analysis=qwas_binary&amp;window=index&amp;model=m4&amp;contrast=severe_vs_none">
+            Explore QWAS →
+          </Link>
         </section>
 
         <section className="evidence-section" aria-labelledby="phenotype-methods-title">
@@ -358,7 +414,7 @@ export default function MethodsPage() {
 
         <section className="atlas-index" aria-labelledby="release-title">
           <div className="section-kicker">Release roadmap</div>
-          <h2 id="release-title">Seven clinical lenses, released in stages</h2>
+          <h2 id="release-title">Eight clinical lenses, released in stages</h2>
           <div className="index-table" role="table" aria-label="Analysis family release roadmap">
             <div className="index-row index-row--head" role="row">
               <span role="columnheader">Analysis</span>

@@ -124,6 +124,7 @@ export type WasAssociationRow = {
   n_secondary: number | null;
   prevalence: number | null;
   label_review_required: boolean;
+  referral_item: boolean;
 };
 
 export type WasPartitionPayload = {
@@ -444,6 +445,7 @@ function rowsFromColumns(
       n_secondary: toNullableNumber(columns.n_secondary?.[index]),
       prevalence: toNullableNumber(columns.prevalence?.[index]),
       label_review_required: toBoolean(columns.label_review_required?.[index]),
+      referral_item: toBoolean(columns.referral_item?.[index]),
     };
   });
 }

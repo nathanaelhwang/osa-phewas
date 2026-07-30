@@ -11,7 +11,7 @@ export default async function FeaturePage({ searchParams }: { searchParams: Prom
     return <><AtlasHeader /><WasFeatureDetail
       initialFamily={family}
       initialKey={first(params.key) ?? ""}
-      initialWindow={first(params.window) ?? "1yr"}
+      initialWindow={first(params.window) ?? (family === "qwas" ? "index" : "1yr")}
       initialContrast={first(params.contrast) ?? "severe_vs_none"}
     /></>;
   }

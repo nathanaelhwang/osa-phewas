@@ -9,6 +9,7 @@ export default function Home() {
     { name: "LabWAS", question: "How do laboratory values and ordering differ?", measure: "β / OR / IRR", status: "Archived snapshot", href: "/was?family=labwas&analysis=labwas_mean" },
     { name: "MedWAS", question: "Which medication classes are filled?", measure: "OR", status: "Archived snapshot", href: "/was?family=medwas&analysis=medwas_fill" },
     { name: "BehWAS", question: "How do EHR-derived behaviors differ?", measure: "OR / β", status: "Preliminary", href: "/was?family=behwas&analysis=behwas_binary&view=forest" },
+    { name: "QWAS", question: "How do sleep-questionnaire responses differ?", measure: "OR / β", status: "Research preview", href: "/was?family=qwas&analysis=qwas_binary" },
     { name: "ProcWAS", question: "How do procedure rates differ?", measure: "IRR", status: "Archived snapshot", href: "/was?family=procwas&analysis=procwas_rate" },
     { name: "UtilWAS", question: "How does healthcare use differ?", measure: "OR / IRR", status: "Review needed", href: "/was?family=utilwas&analysis=utilwas_presence" },
   ];
@@ -22,7 +23,7 @@ export default function Home() {
           <div className="hero__grid">
             <div>
               <h1>How is obstructive sleep apnea associated with the clinical phenome?</h1>
-              <p className="hero__lede">Explore adjusted relationships between OSA severity or cross-domain phenotypes and diseases, laboratory patterns, medication fills, EHR-derived behaviors, procedures, and healthcare use in a sleep-clinic referral cohort.</p>
+              <p className="hero__lede">Explore adjusted relationships between OSA severity or cross-domain phenotypes and diseases, laboratory patterns, medication fills, questionnaires, EHR-derived behaviors, procedures, and healthcare use in a sleep-clinic referral cohort.</p>
             </div>
             <aside className="hero__note" aria-label="Primary analysis settings">
               <span>Primary presentation</span>
@@ -70,7 +71,7 @@ export default function Home() {
 
         <section className="atlas-index page-shell" aria-labelledby="atlas-index-title">
           <div className="section-kicker">Atlas index</div>
-          <h2 id="atlas-index-title">Seven clinical lenses on OSA severity</h2>
+          <h2 id="atlas-index-title">Eight clinical lenses on OSA severity</h2>
           <div className="index-table" role="table" aria-label="Analysis family release index">
             <div className="index-row index-row--head" role="row">
               <span role="columnheader">Analysis</span><span role="columnheader">Question</span><span role="columnheader">Primary measure</span><span role="columnheader">Status</span>

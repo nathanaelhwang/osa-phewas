@@ -130,7 +130,7 @@ export function FeatureDetail({ initialCode, initialContrast }: FeatureDetailPro
         <article><span>Interpretation</span><h2>Association, not causation</h2><p>The reference is a symptomatic referral group. These estimates do not measure population OSA prevalence and should not be described as causal, protective, or independent risk effects.</p><Link href={`/explore?analysis=prevalence&contrast=${contrast}&model=m4&feature=${encodeURIComponent(initialCode)}`}>Return to this feature in the scan →</Link></article>
       </section>
 
-      <section className="related-evidence" aria-labelledby="related-title"><div><span className="section-kicker">Separated by design</span><h2 id="related-title">Related cross-domain evidence</h2><p>Medication, laboratory, procedure, behavior, and utilization matches will appear here in the next release. They will be labeled as related evidence—not silently merged with this disease phenotype.</p></div><div className="related-tags"><span>LabWAS</span><span>MedWAS</span><span>ProcWAS</span><span>UtilWAS</span></div></section>
+      <section className="related-evidence" aria-labelledby="related-title"><div><span className="section-kicker">Separated by design</span><h2 id="related-title">Related cross-domain evidence</h2><p>Medication, laboratory, questionnaire, procedure, behavior, and utilization matches will appear here in a future linked view. They will be labeled as related evidence—not silently merged with this disease phenotype.</p></div><div className="related-tags"><span>LabWAS</span><span>MedWAS</span><span>QWAS</span><span>ProcWAS</span><span>UtilWAS</span></div></section>
     </main>
   );
 }

@@ -75,7 +75,7 @@ export function FeatureSearch({ compact = false }: FeatureSearchProps) {
       }}
     >
       <label htmlFor={inputId}>
-        {compact ? "Find another feature" : "Search diseases, labs, medications, behaviors, procedures, and utilization"}
+        {compact ? "Find another feature" : "Search diseases, labs, medications, behaviors, procedures, utilization, and questionnaires"}
       </label>
       <div className="feature-search__control">
         <span className="search-glyph" aria-hidden="true">⌕</span>
@@ -111,7 +111,7 @@ export function FeatureSearch({ compact = false }: FeatureSearchProps) {
               setOpen(false);
             }
           }}
-          placeholder="Try hypertension, HbA1c, statin, or a feature code"
+          placeholder="Try hypertension, HbA1c, sleepiness, or a feature code"
         />
         <button
           type="button"

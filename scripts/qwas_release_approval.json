@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "release_approved": true,
+  "public_website_release_approved": true,
+  "approval_context": "Project owner directed publication of the aggregate QWAS results in the public OSA Association Atlas on 2026-07-30.",
+  "release_scope": "Aggregate questionnaire-wide association estimates and per-feature answered sample sizes only; no patient-level questionnaire records or verbatim questionnaire text.",
+  "disclosure_threshold": 11,
+  "source_sha256": {
+    "results.csv": "19ae5f078034539fdd4628b2b603c9b014ce8505f73f847a90c1a32d170888d3",
+    "feature_spec.csv": "3de5f6c4ab967fbe8124a8b5c4d7c42256396dd5178b9c12aab28adcff716f90"
+  }
+}
