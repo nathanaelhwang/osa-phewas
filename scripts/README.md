@@ -87,19 +87,22 @@ and vulnerable to healthy-adherer confounding.
 
 ## Aggregate octant-phenotype export
 
-Export the public phenotype summary, expanded cluster distributions, M4 model
-index, and disclosure-controlled three-year curve assets with:
+Export the public phenotype summary, expanded cluster distributions, documented
+CPAP setup/coverage summaries, M4 model index, and disclosure-controlled
+three-year curve assets with:
 
 ```powershell
 python .\scripts\export_phenotype_data.py
 ```
 
 The exporter reads only the validated `website_exports` aggregate package and
-four fixed publication PNGs. It intentionally has no source entry for the
-patient-level phenotype assignment or cross-domain phenotype files. Outputs are:
+four fixed publication PNGs. CPAP publication is additionally bound to the
+exact audited CSV and audit hashes in `scripts/phenotype_release_approval.json`.
+It intentionally has no source entry for the patient-level phenotype assignment
+or cross-domain phenotype files. Outputs are:
 
-- `public/data/phenotypes.json`, containing eight octants, 26 measures, and all
-  168 M4 one-vs-rest panel records;
+- `public/data/phenotypes.json`, containing eight octants, 26 measures, five-window
+  CPAP setup/coverage summaries, and all 168 M4 one-vs-rest panel records;
 - `public/data/phenotype-survival/{level}/{outcome}.json`, 21 lazy-loaded outcome
   assets with tie-aware Aalen–Johansen coordinates and annual risk tables; and
 - four images under `public/images/phenotypes/` for supplemental publication context.
@@ -108,4 +111,6 @@ Exact counts below 11 are emitted as `null`, never zero. Curve coordinates are
 withheld for the 16 panels whose focal event count is suppressed; their model
 metadata and disclosure-safe annual at-risk values remain searchable. Internal
 audit CSVs are validated through the source manifest but are never copied into
-the public bundle.
+the public bundle. CPAP adherence outcomes and usage distributions remain
+unavailable; the published adherence/usage percentages describe source-field
+availability among documented setups, not adherence or treatment effect.

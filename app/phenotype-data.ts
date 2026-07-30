@@ -54,6 +54,73 @@ export type OctantPhenotype = {
   summary: string;
 };
 
+export type CpapTreatmentWindowId =
+  | "index"
+  | "90-days"
+  | "180-days"
+  | "365-days"
+  | "observed-follow-up";
+
+export type CpapTreatmentWindow = {
+  id: CpapTreatmentWindowId;
+  days: number | null;
+  label: string;
+  source_definition: string;
+  denominator_note: string;
+};
+
+export type CpapTreatmentRow = {
+  group_id: string;
+  window_id: CpapTreatmentWindowId;
+  n_octant: number;
+  n_observable: number;
+  n_record_present: number;
+  record_coverage_pct: number;
+  n_documented_setup: number;
+  documented_setup_pct: number;
+  n_adherence_data: number | null;
+  n_adherence_missing: number | null;
+  adherence_data_coverage_pct: number | null;
+  n_usage_data: number | null;
+  usage_data_coverage_pct: number | null;
+  availability_suppressed: boolean;
+};
+
+export type PhenotypeCpapTreatment = {
+  analysis_label: string;
+  default_window_id: CpapTreatmentWindowId;
+  default_note: string;
+  windows: CpapTreatmentWindow[];
+  rows: CpapTreatmentRow[];
+  measure_status: {
+    adherence_outcome: { status: "unavailable"; label: string; reason: string };
+    usage_distribution: {
+      status: "unavailable";
+      label: string;
+      source_unit: "minutes";
+      reason: string;
+    };
+  };
+  interpretation: {
+    setup: string;
+    record: string;
+    denominator: string;
+    availability: string;
+  };
+  disclosure: {
+    threshold: number;
+    suppressed_rows: number;
+    suppressed_exact_count_cells: number;
+    rule: string;
+    audit_status: "PASS";
+  };
+  release: {
+    status: "approved_for_public_website";
+    approved_on: string;
+    summary_sha256: string;
+  };
+};
+
 export type PhenotypeImage = {
   path: string;
   width: number;
@@ -107,7 +174,7 @@ export type OctantSurvivalLevel = {
 };
 
 export type PhenotypeDataset = {
-  schema_version: 2;
+  schema_version: 3;
   release: {
     id: string;
     audience: string;
@@ -130,6 +197,7 @@ export type PhenotypeDataset = {
     standardized_difference_definition: string;
     estimate_note: string;
   };
+  cpap_treatment: PhenotypeCpapTreatment;
   signature_figure: PhenotypeImage;
   survival: {
     analysis_label: string;
@@ -175,7 +243,7 @@ export type PhenotypeDataset = {
 
 export type PhenotypeProfileDataset = Pick<
   PhenotypeDataset,
-  "construction" | "octants" | "cluster_profiles" | "signature_figure" | "caveats"
+  "construction" | "octants" | "cluster_profiles" | "cpap_treatment" | "signature_figure" | "caveats"
 >;
 
 export type PhenotypeOutcomesDataset = Pick<PhenotypeDataset, "octants" | "survival">;

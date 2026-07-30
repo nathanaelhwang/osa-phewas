@@ -190,8 +190,14 @@ export default function MethodsPage() {
             octant model.
           </p>
           <p className="method-callout">
-            CPAP initiation/adherence distributions are omitted because capture and
-            units do not support a defensible denominator. Race/ethnicity remains an M4
+            The phenotype explorer releases documented PAP setup, retained-record,
+            adherence-field, and usage-field coverage across five display windows. These
+            are extract-documentation measures, not true initiation or adherence: absent
+            rows cannot distinguish no treatment from no capture, and fixed-window
+            eligibility uses an existing diagnosis, insurance, and death censor rather
+            than a confirmed PAP-capture boundary. Adherent percentages and usage
+            distributions remain unavailable because those estimates are absent and their
+            implementation or averaging window is not fully confirmed. Race/ethnicity remains an M4
             adjustment covariate, but its descriptive octant breakdown is not published
             because one cell is below the disclosure threshold and release is not approved.
             Curve coordinates are withheld for the 16 panels whose focal event count is

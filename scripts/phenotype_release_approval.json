@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "approved_on": "2026-07-30",
+  "authorization_source": "Project owner confirmation in the Codex task",
+  "public_website_release_approved": true,
+  "supersedes_source_release_flags": true,
+  "supersedes_scope": "Governance and public-website publication flags only; scientific definition confirmations remain unchanged.",
+  "source_artifacts": {
+    "octant_cpap_summary.csv": "8a965ab87b39016acb41bf8c5111fee01e249d662337258904d6985e3c8d6e1b",
+    "octant_cpap_summary_audit.json": "53e7746fdfafe556b3021bfec127563308dbe198577909179a150fcc5330103d"
+  },
+  "approved_fields": [
+    "octant",
+    "n_octant",
+    "initiation_window_days",
+    "n_observable_for_window",
+    "n_cpap_record_present",
+    "cpap_record_coverage_pct",
+    "n_documented_setup",
+    "documented_setup_pct",
+    "initiation_label",
+    "n_started_with_adherence_flag",
+    "adherence_flag_missing",
+    "adherence_coverage_pct",
+    "n_started_with_usage",
+    "usage_coverage_pct",
+    "suppressed",
+    "suppression_reason"
+  ],
+  "withheld_fields": [
+    "n_adherent",
+    "adherent_pct_among_evaluable_starters",
+    "adherence_definition",
+    "mean_usage_hours_night",
+    "sd_usage_hours_night",
+    "median_usage_hours_night",
+    "q1_usage_hours_night",
+    "q3_usage_hours_night",
+    "usage_window_definition"
+  ],
+  "metadata_only_fields": [
+    "usage_unit_source",
+    "usage_unit_confirmed",
+    "adherence_definition_confirmed"
+  ],
+  "publication_conditions": [
+    "Describe setup as a documented signal in the retained CPAP extract, not confirmed treatment initiation.",
+    "Do not classify an absent CPAP row as no treatment or no initiation.",
+    "Describe adherence and usage fields only as data availability; do not publish outcome percentages or usage distributions.",
+    "Render source-suppressed values as Suppressed (<11), never as zero."
+  ]
+}

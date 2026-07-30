@@ -22,10 +22,10 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 CURVE_SCHEMA_VERSION = 2
-EXPORTER_VERSION = "2.1.0"
-RELEASE_ID = "2026-07-29"
+EXPORTER_VERSION = "3.0.0"
+RELEASE_ID = "2026-07-30"
 DISCLOSURE_THRESHOLD = 11
 EVENT_COUNT_WITHHOLDING_REASON = (
     "Complementary suppression prevents reconstruction of rare focal event counts."
@@ -83,6 +83,38 @@ OCTANT_SUMMARIES = {
     "high-all": "Above the cohort median on all three phenotype axes.",
 }
 
+CPAP_GROUP_ORDER = (*OCTANT_ORDER, "overall")
+CPAP_WINDOW_ORDER = ("index", "90-days", "180-days", "365-days", "observed-follow-up")
+CPAP_WINDOWS = {
+    "index": (0, "Before / on index"),
+    "90-days": (90, "90 days"),
+    "180-days": (180, "180 days"),
+    "365-days": (365, "365 days"),
+    "observed-follow-up": (None, "Observed follow-up"),
+}
+CPAP_SOURCE_LABELS = {
+    "index": "documented setup before/on sleep-study index",
+    "90-days": "documented new setup after index through 90 days",
+    "180-days": "documented new setup after index through 180 days",
+    "365-days": "documented new setup after index through 365 days",
+    "observed-follow-up": "documented setup after index through observed follow-up",
+}
+CPAP_APPROVED_FIELDS = {
+    "octant", "n_octant", "initiation_window_days", "n_observable_for_window",
+    "n_cpap_record_present", "cpap_record_coverage_pct", "n_documented_setup",
+    "documented_setup_pct", "initiation_label", "n_started_with_adherence_flag",
+    "adherence_flag_missing", "adherence_coverage_pct", "n_started_with_usage",
+    "usage_coverage_pct", "suppressed", "suppression_reason",
+}
+CPAP_WITHHELD_FIELDS = {
+    "n_adherent", "adherent_pct_among_evaluable_starters", "adherence_definition",
+    "mean_usage_hours_night", "sd_usage_hours_night", "median_usage_hours_night",
+    "q1_usage_hours_night", "q3_usage_hours_night", "usage_window_definition",
+}
+CPAP_METADATA_ONLY_FIELDS = {
+    "usage_unit_source", "usage_unit_confirmed", "adherence_definition_confirmed",
+}
+
 AXES = (
     {
         "id": "physiologic",
@@ -120,6 +152,18 @@ CSV_FIELDS = {
         "q3", "numerator", "denominator", "proportion", "cohort_estimate",
         "standardized_difference", "suppressed",
     },
+    "octant_cpap_summary.csv": {
+        "octant", "n_octant", "initiation_window_days", "n_observable_for_window",
+        "n_cpap_record_present", "cpap_record_coverage_pct", "n_documented_setup",
+        "documented_setup_pct", "initiation_label", "n_started_with_adherence_flag",
+        "n_adherent", "adherent_pct_among_evaluable_starters",
+        "adherence_flag_missing", "adherence_coverage_pct", "n_started_with_usage",
+        "usage_coverage_pct", "mean_usage_hours_night", "sd_usage_hours_night",
+        "median_usage_hours_night", "q1_usage_hours_night", "q3_usage_hours_night",
+        "usage_window_definition", "usage_unit_source", "usage_unit_confirmed",
+        "adherence_definition", "adherence_definition_confirmed", "suppressed",
+        "suppression_reason",
+    },
     "octant_score_correlations.csv": {"score_x", "score_y", "spearman_rho"},
     "octant_cif_metadata.csv": {
         "level", "outcome", "outcome_name", "category", "octant", "contrast",
@@ -156,6 +200,8 @@ CSV_FIELDS = {
 
 PUBLIC_EXPORT_FILES = tuple(CSV_FIELDS)
 OVERALL_AUDIT_FILE = "octant_cif_overall_audit.json"
+CPAP_AUDIT_FILE = "octant_cpap_summary_audit.json"
+CPAP_RELEASE_APPROVAL = WEBSITE_ROOT / "scripts" / "phenotype_release_approval.json"
 
 IMAGE_SOURCES = {
     "construction": (
@@ -347,7 +393,78 @@ def validate_overall_manifest(
         raise ExportValidationError("overall audit: direct-estimation validation did not pass")
 
 
-def validate_manifest() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+def validate_cpap_release(
+    manifest: dict[str, Any], inventory: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    approval = read_json(CPAP_RELEASE_APPROVAL, WEBSITE_ROOT, "CPAP website release approval")
+    source_artifacts = approval.get("source_artifacts")
+    if (
+        approval.get("schema_version") != 1
+        or approval.get("public_website_release_approved") is not True
+        or approval.get("supersedes_source_release_flags") is not True
+        or not isinstance(approval.get("approved_on"), str)
+        or not isinstance(approval.get("authorization_source"), str)
+        or not isinstance(source_artifacts, dict)
+        or set(approval.get("approved_fields", [])) != CPAP_APPROVED_FIELDS
+        or set(approval.get("withheld_fields", [])) != CPAP_WITHHELD_FIELDS
+        or set(approval.get("metadata_only_fields", [])) != CPAP_METADATA_ONLY_FIELDS
+        or CPAP_APPROVED_FIELDS | CPAP_WITHHELD_FIELDS | CPAP_METADATA_ONLY_FIELDS
+        != CSV_FIELDS["octant_cpap_summary.csv"]
+    ):
+        raise ExportValidationError("CPAP website release approval: invalid or incomplete authorization")
+
+    for file_name in ("octant_cpap_summary.csv", CPAP_AUDIT_FILE):
+        entry = inventory.get(file_name)
+        path = allowlisted_path(EXPORT_ROOT / file_name, EXPORT_ROOT, file_name)
+        if (
+            entry is None
+            or entry.get("internal") is not False
+            or entry.get("bytes") != path.stat().st_size
+            or entry.get("sha256") != sha256(path)
+            or source_artifacts.get(file_name) != entry.get("sha256")
+        ):
+            raise ExportValidationError(f"{file_name}: CPAP release integrity mismatch")
+
+    cpap_manifest = manifest.get("cpap_treatment_summary")
+    if (
+        not isinstance(cpap_manifest, dict)
+        or cpap_manifest.get("rows") != 45
+        or cpap_manifest.get("groups") != list(CPAP_GROUP_ORDER)
+        or cpap_manifest.get("window_count") != 5
+        or cpap_manifest.get("suppressed_rows") != 2
+        or cpap_manifest.get("suppressed_cells") != 6
+        or cpap_manifest.get("disclosure_threshold") != DISCLOSURE_THRESHOLD
+        or cpap_manifest.get("disclosure_audit_status") != "PASS"
+        or cpap_manifest.get("reconstruction_audit_result") != "PASS"
+        or cpap_manifest.get("browser_delivery_contains_hidden_counts") is not False
+    ):
+        raise ExportValidationError("CPAP summary: source validation or disclosure audit did not pass")
+
+    audit = read_json(EXPORT_ROOT / CPAP_AUDIT_FILE, EXPORT_ROOT, "CPAP aggregate audit")
+    disclosure = audit.get("disclosure")
+    confirmations = audit.get("source_definition_confirmations")
+    if (
+        not isinstance(disclosure, dict)
+        or disclosure.get("status") != "PASS"
+        or disclosure.get("threshold") != DISCLOSURE_THRESHOLD
+        or disclosure.get("suppressed_count_cells") != 6
+        or disclosure.get("suppressed_rows") != 2
+        or disclosure.get("suppressed_values_cannot_be_reconstructed") is not True
+        or disclosure.get("browser_delivered_values_contain_no_hidden_counts") is not True
+        or not isinstance(confirmations, dict)
+        or confirmations.get("setup_date_is_minimum_documented_source_value_per_person") is not True
+        or confirmations.get("setup_date_is_earliest_lifetime_pap_setup") is not False
+        or confirmations.get("absent_cpap_row_means_no_pap_initiation") is not False
+        or confirmations.get("pap_capture_observation_end_confirmed") is not False
+        or confirmations.get("adherence_definition_confirmed") is not False
+        or confirmations.get("mean_pap_usage_first_90_days_after_setup_confirmed") is not False
+        or confirmations.get("mean_pap_usage_averaging_denominator_confirmed") is not False
+    ):
+        raise ExportValidationError("CPAP aggregate audit: required disclosure or definition checks failed")
+    return approval
+
+
+def validate_manifest() -> tuple[dict[str, Any], dict[str, dict[str, Any]], dict[str, Any]]:
     manifest_path = EXPORT_ROOT / "phenotype_website_export_manifest.json"
     manifest = read_json(manifest_path, EXPORT_ROOT, "export manifest")
     validation = manifest.get("validation")
@@ -369,7 +486,8 @@ def validate_manifest() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
         if entry.get("bytes") != path.stat().st_size or entry.get("sha256") != sha256(path):
             raise ExportValidationError(f"{file_name}: manifest integrity mismatch")
     validate_overall_manifest(manifest, by_name)
-    return manifest, by_name
+    cpap_approval = validate_cpap_release(manifest, by_name)
+    return manifest, by_name, cpap_approval
 
 
 def validate_row_count(file_name: str, rows: list[dict[str, str]], inventory: dict[str, dict[str, Any]]) -> None:
@@ -521,6 +639,187 @@ def load_clusters(
             raise ExportValidationError("score correlations: invalid diagonal")
 
     return [by_octant[octant] for octant in OCTANT_ORDER], cut_points, metrics, correlations
+
+
+def load_cpap_summary(
+    inventory: dict[str, dict[str, Any]], approval: dict[str, Any], octants: list[dict[str, Any]]
+) -> dict[str, Any]:
+    file_name = "octant_cpap_summary.csv"
+    rows = read_csv(file_name)
+    validate_row_count(file_name, rows, inventory)
+    if len(rows) != len(CPAP_GROUP_ORDER) * len(CPAP_WINDOW_ORDER):
+        raise ExportValidationError("CPAP summary: expected nine groups by five windows")
+
+    expected_n = {row["id"]: row["n"] for row in octants}
+    expected_n["overall"] = sum(expected_n.values())
+    days_to_window = {days: window_id for window_id, (days, _) in CPAP_WINDOWS.items()}
+    expected_keys = {
+        (group_id, window_id)
+        for group_id in CPAP_GROUP_ORDER
+        for window_id in CPAP_WINDOW_ORDER
+    }
+    records: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def check_percentage(count: int, denominator: int, percentage: float, context: str) -> None:
+        expected = 100 * count / denominator
+        if not math.isclose(percentage, expected, rel_tol=0, abs_tol=0.000001):
+            raise ExportValidationError(f"{context}: percentage does not match its denominator")
+
+    for row_number, row in enumerate(rows, start=2):
+        context = f"CPAP summary row {row_number}"
+        group_id = row["octant"]
+        days = nullable_whole(row["initiation_window_days"], f"{context} window")
+        window_id = days_to_window.get(days)
+        key = (group_id, window_id) if window_id is not None else None
+        if group_id not in CPAP_GROUP_ORDER or key not in expected_keys or key in records:
+            raise ExportValidationError(f"{context}: invalid or duplicate group-window key")
+        if row["initiation_label"] != CPAP_SOURCE_LABELS[window_id]:
+            raise ExportValidationError(f"{context}: unexpected setup-window label")
+        if any(row[field] != "" for field in CPAP_WITHHELD_FIELDS):
+            raise ExportValidationError(f"{context}: withheld outcome or usage estimate was populated")
+        if (
+            not row["usage_unit_source"]
+            or boolean(row["usage_unit_confirmed"], f"{context} usage unit") is not True
+            or boolean(row["adherence_definition_confirmed"], f"{context} adherence definition") is not False
+        ):
+            raise ExportValidationError(f"{context}: source-definition flags changed")
+
+        n_octant = whole(row["n_octant"], f"{context} n_octant")
+        n_observable = whole(row["n_observable_for_window"], f"{context} n_observable")
+        n_record = whole(row["n_cpap_record_present"], f"{context} n_record")
+        record_pct = finite(row["cpap_record_coverage_pct"], f"{context} record_pct")
+        n_setup = whole(row["n_documented_setup"], f"{context} n_setup")
+        setup_pct = finite(row["documented_setup_pct"], f"{context} setup_pct")
+        suppressed = boolean(row["suppressed"], f"{context} suppressed")
+        n_adherence_data = nullable_whole(
+            row["n_started_with_adherence_flag"], f"{context} n_adherence_data"
+        )
+        n_adherence_missing = nullable_whole(
+            row["adherence_flag_missing"], f"{context} n_adherence_missing"
+        )
+        adherence_data_pct = nullable_finite(
+            row["adherence_coverage_pct"], f"{context} adherence_data_pct"
+        )
+        n_usage_data = nullable_whole(row["n_started_with_usage"], f"{context} n_usage_data")
+        usage_data_pct = nullable_finite(row["usage_coverage_pct"], f"{context} usage_data_pct")
+
+        if n_octant != expected_n[group_id] or not (
+            DISCLOSURE_THRESHOLD <= n_setup <= n_record <= n_observable <= n_octant
+        ):
+            raise ExportValidationError(f"{context}: invalid published count ordering")
+        if window_id == "index" and n_observable != n_octant:
+            raise ExportValidationError(f"{context}: index denominator must equal the phenotype group")
+        check_percentage(n_record, n_observable, record_pct, f"{context} record coverage")
+        check_percentage(n_setup, n_observable, setup_pct, f"{context} setup percentage")
+
+        availability_values = (
+            n_adherence_data,
+            n_adherence_missing,
+            adherence_data_pct,
+            n_usage_data,
+            usage_data_pct,
+        )
+        if suppressed:
+            if any(value is not None for value in availability_values) or not row["suppression_reason"]:
+                raise ExportValidationError(f"{context}: suppressed availability fields were exposed")
+        else:
+            if any(value is None for value in availability_values) or row["suppression_reason"]:
+                raise ExportValidationError(f"{context}: unexpected missing or suppression marker")
+            exact_counts = (n_adherence_data, n_adherence_missing, n_usage_data)
+            if any(count < DISCLOSURE_THRESHOLD for count in exact_counts):
+                raise ExportValidationError(f"{context}: unsuppressed sub-threshold count")
+            if n_adherence_data + n_adherence_missing != n_setup or n_usage_data > n_setup:
+                raise ExportValidationError(f"{context}: availability counts do not reconcile")
+            check_percentage(n_adherence_data, n_setup, adherence_data_pct, f"{context} adherence coverage")
+            check_percentage(n_usage_data, n_setup, usage_data_pct, f"{context} usage coverage")
+
+        records[key] = {
+            "group_id": group_id,
+            "window_id": window_id,
+            "n_octant": n_octant,
+            "n_observable": n_observable,
+            "n_record_present": n_record,
+            "record_coverage_pct": record_pct,
+            "n_documented_setup": n_setup,
+            "documented_setup_pct": setup_pct,
+            "n_adherence_data": n_adherence_data,
+            "n_adherence_missing": n_adherence_missing,
+            "adherence_data_coverage_pct": adherence_data_pct,
+            "n_usage_data": n_usage_data,
+            "usage_data_coverage_pct": usage_data_pct,
+            "availability_suppressed": suppressed,
+        }
+
+    if set(records) != expected_keys:
+        raise ExportValidationError("CPAP summary: incomplete group-window matrix")
+    expected_suppressed = {("hypoxemia-predominant", "index"), ("overall", "index")}
+    if {key for key, row in records.items() if row["availability_suppressed"]} != expected_suppressed:
+        raise ExportValidationError("CPAP summary: suppression pattern changed")
+
+    for window_id in CPAP_WINDOW_ORDER:
+        overall = records[("overall", window_id)]
+        for field in ("n_octant", "n_observable", "n_record_present", "n_documented_setup"):
+            if overall[field] != sum(records[(octant, window_id)][field] for octant in OCTANT_ORDER):
+                raise ExportValidationError(f"CPAP summary: {field} does not reconcile at {window_id}")
+
+    denominator_notes = {
+        "index": "All phenotype members with a documented sleep-study index.",
+        "90-days": "Phenotype members whose existing diagnosis, insurance, and death censor reaches index plus 90 days.",
+        "180-days": "Phenotype members whose existing diagnosis, insurance, and death censor reaches index plus 180 days.",
+        "365-days": "Phenotype members whose existing diagnosis, insurance, and death censor reaches index plus 365 days.",
+        "observed-follow-up": "Phenotype members with positive observed follow-up; setup must occur after index and by the existing censor.",
+    }
+    return {
+        "analysis_label": "CPAP treatment documentation",
+        "default_window_id": "90-days",
+        "default_note": "The 90-day view is an interface default, not a protocol-designated primary horizon.",
+        "windows": [
+            {
+                "id": window_id,
+                "days": CPAP_WINDOWS[window_id][0],
+                "label": CPAP_WINDOWS[window_id][1],
+                "source_definition": CPAP_SOURCE_LABELS[window_id],
+                "denominator_note": denominator_notes[window_id],
+            }
+            for window_id in CPAP_WINDOW_ORDER
+        ],
+        "rows": [
+            records[(group_id, window_id)]
+            for group_id in CPAP_GROUP_ORDER
+            for window_id in CPAP_WINDOW_ORDER
+        ],
+        "measure_status": {
+            "adherence_outcome": {
+                "status": "unavailable",
+                "label": "Adherent percentage unavailable",
+                "reason": "No adherence outcome estimate is released because the source field's exact algorithm and numeric coding are not authoritatively confirmed.",
+            },
+            "usage_distribution": {
+                "status": "unavailable",
+                "label": "Usage distribution unavailable",
+                "source_unit": "minutes",
+                "reason": "The released aggregate contains no mean or distribution; its averaging denominator, missing-night handling, and setup-based first-90-day window are unconfirmed.",
+            },
+        },
+        "interpretation": {
+            "setup": "Documented setup is the earliest parseable setup value in the retained extract, not a confirmed lifetime first PAP initiation.",
+            "record": "A retained CPAP record contains at least one documented setup or usage signal. An absent row may mean no signal or no capture; it is not a no-CPAP classification.",
+            "denominator": "Fixed-window denominators require observation through the full window using an existing diagnosis, insurance, and death censor; that boundary is not confirmed as PAP data-capture end.",
+            "availability": "Adherence and usage coverage describe whether a source field is present among documented setups, not adherence or treatment effectiveness.",
+        },
+        "disclosure": {
+            "threshold": DISCLOSURE_THRESHOLD,
+            "suppressed_rows": 2,
+            "suppressed_exact_count_cells": 6,
+            "rule": "Protected adherence- and usage-availability cells are null and shown as Suppressed (<11), never as zero.",
+            "audit_status": "PASS",
+        },
+        "release": {
+            "status": "approved_for_public_website",
+            "approved_on": approval["approved_on"],
+            "summary_sha256": inventory[file_name]["sha256"],
+        },
+    }
 
 
 def load_metadata(inventory: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1039,8 +1338,9 @@ def reject_path_leaks(value: Any, context: str = "payload") -> None:
 
 
 def build() -> tuple[dict[str, Any], dict[tuple[str, str], dict[str, Any]]]:
-    manifest, inventory = validate_manifest()
+    manifest, inventory, cpap_approval = validate_manifest()
     octants, cut_points, metrics, correlations = load_clusters(inventory)
+    cpap_treatment = load_cpap_summary(inventory, cpap_approval, octants)
     metadata = load_metadata(inventory)
     overall_assets = load_overall_assets(inventory, metadata)
     curve_assets, withheld = load_curve_assets(inventory, metadata, overall_assets)
@@ -1119,6 +1419,7 @@ def build() -> tuple[dict[str, Any], dict[tuple[str, str], dict[str, Any]]]:
             "standardized_difference_definition": manifest["cluster_tables"]["standardized_difference_definition"],
             "estimate_note": "Continuous matrix values are means; binary values are proportions. Detailed cards also show medians, quartiles, denominators, and coverage.",
         },
+        "cpap_treatment": cpap_treatment,
         "signature_figure": images["signature"],
         "survival": {
             "analysis_label": "Octant-exposure Incidence PheDAS",
@@ -1173,8 +1474,8 @@ def build() -> tuple[dict[str, Any], dict[tuple[str, str], dict[str, Any]]]:
                 "text": "Octants are strongly structured by age and sex. M4 models adjust for both, but unadjusted cluster and curve comparisons are neither causal nor clinical treatment effects.",
             },
             {
-                "title": "CPAP summaries unavailable",
-                "text": "CPAP initiation and adherence distributions are not shown because missing capture cannot be distinguished from never-started and mean-usage units are unconfirmed; no defensible denominator is available.",
+                "title": "CPAP documentation limits",
+                "text": "Released setup and source-field coverage describe the retained extract, not true treatment initiation or adherence. An absent row cannot distinguish no signal from no capture; adherence outcomes and usage distributions remain unavailable.",
             },
             {
                 "title": "Race/ethnicity withheld",
@@ -1243,6 +1544,7 @@ def main() -> int:
                 "output": "public/data/phenotypes.json",
                 "octants": len(payload["octants"]),
                 "cluster_metrics": len(payload["cluster_profiles"]["metrics"]),
+                "cpap_summary_rows": len(payload["cpap_treatment"]["rows"]),
                 "survival_panels": payload["survival"]["scope"]["panel_count"],
                 "interactive_curve_panels": payload["survival"]["scope"]["curve_panels_available"],
                 "withheld_curve_panels": payload["survival"]["scope"]["curve_panels_withheld"],

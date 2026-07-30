@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useMemo, useState, type CSSProperties } from "react";
 import {
   publicAssetPath,
+  type CpapTreatmentRow,
+  type CpapTreatmentWindowId,
   type DistributionSummary,
   type OctantPhenotype,
   type PhenotypeMetric,
@@ -41,6 +43,64 @@ function displayUnit(metric: PhenotypeMetric) {
 
 function formatSigned(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)} SD`;
+}
+
+function CpapCoverage({
+  count,
+  percentage,
+  denominator,
+  compact = false,
+}: {
+  count: number | null;
+  percentage: number | null;
+  denominator: number;
+  compact?: boolean;
+}) {
+  if (count === null || percentage === null) {
+    return <span className="phenotype-cpap-suppressed">Suppressed (&lt;11)</span>;
+  }
+  return compact ? (
+    <><strong>{percentage.toFixed(1)}%</strong><small>{count.toLocaleString()} / {denominator.toLocaleString()}</small></>
+  ) : (
+    <><strong>{percentage.toFixed(1)}%</strong><span>{count.toLocaleString()} of {denominator.toLocaleString()}</span></>
+  );
+}
+
+function CpapComparisonRow({
+  row,
+  octant,
+  selected,
+  onSelect,
+}: {
+  row: CpapTreatmentRow;
+  octant: OctantPhenotype | undefined;
+  selected: boolean;
+  onSelect: (() => void) | undefined;
+}) {
+  const label = octant?.label ?? "All phenotypes";
+  return (
+    <tr data-selected={selected} data-reference={!octant}>
+      <th scope="row">
+        {octant && onSelect ? (
+          <button type="button" onClick={onSelect} aria-label={`Select ${label}`}>
+            <span>{octant.glyph}</span><strong>{label}</strong>
+          </button>
+        ) : (
+          <div><span>ALL</span><strong>{label}</strong></div>
+        )}
+      </th>
+      <td>{row.n_observable.toLocaleString()}</td>
+      <td>
+        <div className="phenotype-cpap-bar" aria-label={`${row.documented_setup_pct.toFixed(1)}%, ${row.n_documented_setup.toLocaleString()} of ${row.n_observable.toLocaleString()}`}>
+          <i style={{ width: `${row.documented_setup_pct}%` }} />
+          <CpapCoverage count={row.n_documented_setup} percentage={row.documented_setup_pct} denominator={row.n_observable} compact />
+        </div>
+      </td>
+      <td><CpapCoverage count={row.n_record_present} percentage={row.record_coverage_pct} denominator={row.n_observable} compact /></td>
+      <td><CpapCoverage count={row.n_adherence_data} percentage={row.adherence_data_coverage_pct} denominator={row.n_documented_setup} compact /></td>
+      <td><CpapCoverage count={row.n_usage_data} percentage={row.usage_data_coverage_pct} denominator={row.n_documented_setup} compact /></td>
+    </tr>
+  );
 }
 
 function matrixStyle(value: number): CSSProperties {
@@ -206,10 +266,14 @@ function ScoreCorrelationTable({ data }: { data: PhenotypeProfileDataset }) {
 
 export function PhenotypeExplorer({ data }: { data: PhenotypeProfileDataset }) {
   const [selectedOctantId, setSelectedOctantId] = useState(data.octants[0]?.id ?? "");
+  const [selectedCpapWindowId, setSelectedCpapWindowId] = useState<CpapTreatmentWindowId>(data.cpap_treatment.default_window_id);
   const [metricDomain, setMetricDomain] = useState<MetricDomainFilter>("all");
   const [metricQuery, setMetricQuery] = useState("");
 
   const selectedOctant = data.octants.find((octant) => octant.id === selectedOctantId) ?? data.octants[0]!;
+  const selectedCpapWindow = data.cpap_treatment.windows.find((window) => window.id === selectedCpapWindowId) ?? data.cpap_treatment.windows[0]!;
+  const cpapRows = data.cpap_treatment.rows.filter((row) => row.window_id === selectedCpapWindow.id);
+  const selectedCpapRow = cpapRows.find((row) => row.group_id === selectedOctant.id) ?? cpapRows[0]!;
   const visibleMetrics = useMemo(() => {
     const needle = metricQuery.trim().toLowerCase();
     return data.cluster_profiles.metrics.filter((metric) => {
@@ -278,6 +342,62 @@ export function PhenotypeExplorer({ data }: { data: PhenotypeProfileDataset }) {
           </div>
           {!visibleMetrics.length ? <p className="phenotype-metric-empty">No aggregate measure matches this search and domain.</p> : null}
         </article>
+      </section>
+
+      <section className="phenotype-cpap" aria-labelledby="phenotype-cpap-title">
+        <div className="section-heading">
+          <div><span>CPAP treatment documentation</span><h2 id="phenotype-cpap-title">Documented PAP setup by phenotype</h2></div>
+          <p>This section summarizes documented setup signals in the retained CPAP extract. It does not estimate true treatment initiation, uptake, adherence, or effectiveness.</p>
+        </div>
+
+        <div className="phenotype-cpap-window-switch" role="group" aria-label="Documented PAP setup window">
+          {data.cpap_treatment.windows.map((window) => (
+            <button type="button" key={window.id} aria-pressed={window.id === selectedCpapWindow.id} onClick={() => setSelectedCpapWindowId(window.id)}>
+              {window.label}
+            </button>
+          ))}
+        </div>
+        <div className="phenotype-cpap-window-note" aria-live="polite">
+          <strong>{selectedCpapWindow.source_definition}</strong>
+          <span>{selectedCpapWindow.denominator_note}</span>
+          {selectedCpapWindow.id === data.cpap_treatment.default_window_id ? <small>{data.cpap_treatment.default_note}</small> : null}
+        </div>
+
+        <article className="phenotype-cpap-selected" aria-live="polite">
+          <header>
+            <span className="octant-glyph">{selectedOctant.glyph}</span>
+            <div><span>Selected phenotype</span><h3>{selectedOctant.label}</h3><p>{selectedCpapWindow.label} view, {selectedCpapRow.n_observable.toLocaleString()} observable through this window</p></div>
+          </header>
+          <div className="phenotype-cpap-metrics">
+            <div data-primary="true"><span>Documented PAP setup signal</span><CpapCoverage count={selectedCpapRow.n_documented_setup} percentage={selectedCpapRow.documented_setup_pct} denominator={selectedCpapRow.n_observable} /></div>
+            <div><span>Retained CPAP record</span><CpapCoverage count={selectedCpapRow.n_record_present} percentage={selectedCpapRow.record_coverage_pct} denominator={selectedCpapRow.n_observable} /></div>
+            <div><span>Adherence data available</span><CpapCoverage count={selectedCpapRow.n_adherence_data} percentage={selectedCpapRow.adherence_data_coverage_pct} denominator={selectedCpapRow.n_documented_setup} /></div>
+            <div><span>Usage measure available</span><CpapCoverage count={selectedCpapRow.n_usage_data} percentage={selectedCpapRow.usage_data_coverage_pct} denominator={selectedCpapRow.n_documented_setup} /></div>
+          </div>
+        </article>
+
+        <div className="phenotype-cpap-unavailable">
+          <article><span>Outcome not released</span><h3>{data.cpap_treatment.measure_status.adherence_outcome.label}</h3><p>{data.cpap_treatment.measure_status.adherence_outcome.reason}</p></article>
+          <article><span>Distribution not released</span><h3>{data.cpap_treatment.measure_status.usage_distribution.label}</h3><p>{data.cpap_treatment.measure_status.usage_distribution.reason}</p></article>
+        </div>
+
+        <div className="phenotype-cpap-table-wrap">
+          <table className="phenotype-cpap-table">
+            <caption>All-phenotype comparison for {selectedCpapWindow.label}. Availability percentages use documented setups as their denominator.</caption>
+            <thead><tr><th scope="col">Phenotype</th><th scope="col">Observable</th><th scope="col">Documented setup</th><th scope="col">Retained record</th><th scope="col">Adherence data</th><th scope="col">Usage data</th></tr></thead>
+            <tbody>
+              {cpapRows.map((row) => {
+                const octant = data.octants.find((candidate) => candidate.id === row.group_id);
+                return <CpapComparisonRow key={row.group_id} row={row} octant={octant} selected={row.group_id === selectedOctant.id} onSelect={octant ? () => setSelectedOctantId(octant.id) : undefined} />;
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <details className="phenotype-cpap-notes">
+          <summary>Definitions and interpretation limits</summary>
+          <div><p>{data.cpap_treatment.interpretation.setup}</p><p>{data.cpap_treatment.interpretation.record}</p><p>{data.cpap_treatment.interpretation.denominator}</p><p>{data.cpap_treatment.interpretation.availability}</p><p>{data.cpap_treatment.disclosure.rule}</p></div>
+        </details>
       </section>
 
       <section className="phenotype-figures" aria-labelledby="phenotype-figures-title">

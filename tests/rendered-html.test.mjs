@@ -214,6 +214,20 @@ test("server-renders the enriched octant profile subpage", async () => {
   assert.match(text, /Impaired fasting glucose/i);
   assert.match(text, /IncWAS follow-up/i);
   assert.match(text, /Coverage/i);
+  assert.match(text, /CPAP treatment documentation/i);
+  assert.match(text, /Documented PAP setup by phenotype/i);
+  assert.match(text, /Before \/ on index/i);
+  assert.match(text, /90 days/i);
+  assert.match(text, /180 days/i);
+  assert.match(text, /365 days/i);
+  assert.match(text, /Observed follow-up/i);
+  assert.match(html, /<button(?=[^>]*aria-pressed=["']true["'])[^>]*>\s*90 days\s*<\/button>/i);
+  assert.match(text, /37\.7\s*%\s+979 of 2,599/i);
+  assert.match(text, /45\.9\s*%\s+1,194 of 2,599/i);
+  assert.match(text, /Adherent percentage unavailable/i);
+  assert.match(text, /Usage distribution unavailable/i);
+  assert.match(text, /All-phenotype comparison for 90 days/i);
+  assert.match(text, /does not estimate true treatment initiation, uptake, adherence, or effectiveness/i);
   assert.match(text, /Compare all eight phenotypes in native units/i);
   assert.match(text, /containing cohort/i);
   assert.match(text, /Pairwise Spearman correlations/i);
@@ -595,7 +609,7 @@ test("phenotype release contains enriched clusters and disclosure-safe interacti
   const phenotype = await readJson("phenotypes.json");
   const serialized = JSON.stringify(phenotype);
 
-  assert.equal(phenotype.schema_version, 2);
+  assert.equal(phenotype.schema_version, 3);
   assert.equal(phenotype.release.status, "public_research_release");
   assert.equal(phenotype.construction.shared_cohort_n, 70_880);
   assert.equal(phenotype.construction.classification_coverage_pct, 100);
@@ -625,6 +639,50 @@ test("phenotype release contains enriched clusters and disclosure-safe interacti
       }
     }
   }
+
+  const cpap = phenotype.cpap_treatment;
+  assert.equal(cpap.release.status, "approved_for_public_website");
+  assert.equal(cpap.release.approved_on, "2026-07-30");
+  assert.equal(cpap.default_window_id, "90-days");
+  assert.match(cpap.default_note, /interface default, not a protocol-designated primary horizon/i);
+  assert.deepEqual(cpap.windows.map((window) => window.id), [
+    "index", "90-days", "180-days", "365-days", "observed-follow-up",
+  ]);
+  assert.deepEqual(cpap.windows.map((window) => window.days), [0, 90, 180, 365, null]);
+  assert.equal(cpap.rows.length, 45);
+  const cpapGroups = [...phenotype.octants.map((octant) => octant.id), "overall"];
+  assert.deepEqual([...new Set(cpap.rows.map((row) => row.group_id))], cpapGroups);
+  assert.equal(new Set(cpap.rows.map((row) => `${row.group_id}|${row.window_id}`)).size, 45);
+  assert.deepEqual(
+    cpap.rows.filter((row) => row.availability_suppressed).map((row) => `${row.group_id}|${row.window_id}`),
+    ["hypoxemia-predominant|index", "overall|index"],
+  );
+  for (const row of cpap.rows) {
+    assert.ok(row.n_octant >= row.n_observable);
+    assert.ok(row.n_observable >= row.n_record_present);
+    assert.ok(row.n_record_present >= row.n_documented_setup);
+    assert.ok(row.n_documented_setup >= 11);
+    assert.ok(Math.abs(row.record_coverage_pct - 100 * row.n_record_present / row.n_observable) <= 0.000001);
+    assert.ok(Math.abs(row.documented_setup_pct - 100 * row.n_documented_setup / row.n_observable) <= 0.000001);
+    if (row.availability_suppressed) {
+      assert.equal(row.n_adherence_data, null);
+      assert.equal(row.n_adherence_missing, null);
+      assert.equal(row.adherence_data_coverage_pct, null);
+      assert.equal(row.n_usage_data, null);
+      assert.equal(row.usage_data_coverage_pct, null);
+    } else {
+      assert.ok(row.n_adherence_data >= 11);
+      assert.ok(row.n_adherence_missing >= 11);
+      assert.ok(row.n_usage_data >= 11);
+      assert.equal(row.n_adherence_data + row.n_adherence_missing, row.n_documented_setup);
+      assert.ok(Math.abs(row.adherence_data_coverage_pct - 100 * row.n_adherence_data / row.n_documented_setup) <= 0.000001);
+      assert.ok(Math.abs(row.usage_data_coverage_pct - 100 * row.n_usage_data / row.n_documented_setup) <= 0.000001);
+    }
+  }
+  assert.equal(cpap.measure_status.adherence_outcome.status, "unavailable");
+  assert.equal(cpap.measure_status.usage_distribution.status, "unavailable");
+  assert.equal(cpap.measure_status.usage_distribution.source_unit, "minutes");
+  assert.doesNotMatch(serialized, /n_adherent|adherent_pct_among_evaluable_starters|mean_usage_hours_night/);
 
   assert.deepEqual(
     phenotype.survival.levels.map((level) => [level.id, level.panel_count, level.outcomes.length]),

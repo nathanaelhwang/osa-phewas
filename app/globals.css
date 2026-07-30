@@ -2572,6 +2572,309 @@ code,
   text-align: center;
 }
 
+.phenotype-cpap {
+  margin-top: 62px;
+  padding-top: 44px;
+  border-top: 1px solid var(--rule);
+}
+
+.phenotype-cpap-window-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.phenotype-cpap-window-switch button {
+  min-height: 38px;
+  padding: 7px 13px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.phenotype-cpap-window-switch button[aria-pressed="true"] {
+  border-color: #225ea6;
+  background: #e5edf7;
+  color: #183c68;
+  box-shadow: inset 0 0 0 1px #225ea6;
+}
+
+.phenotype-cpap-window-note {
+  display: grid;
+  gap: 3px;
+  margin-top: 10px;
+  padding: 12px 15px;
+  border-left: 3px solid #7da0c9;
+  background: #edf4fb;
+}
+
+.phenotype-cpap-window-note strong {
+  font-size: 12px;
+}
+
+.phenotype-cpap-window-note span,
+.phenotype-cpap-window-note small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.phenotype-cpap-selected {
+  margin-top: 14px;
+  padding: 22px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.phenotype-cpap-selected > header {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.phenotype-cpap-selected > header > .octant-glyph {
+  padding: 9px 11px;
+  border-radius: 7px;
+  background: #e5edf7;
+  color: #183c68;
+}
+
+.phenotype-cpap-selected > header span:not(.octant-glyph),
+.phenotype-cpap-unavailable article > span {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.phenotype-cpap-selected h3 {
+  margin: 2px 0 1px;
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+}
+
+.phenotype-cpap-selected header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.phenotype-cpap-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.phenotype-cpap-metrics > div {
+  min-width: 0;
+  padding: 14px;
+  border-top: 3px solid #8ca8c9;
+  background: var(--canvas);
+}
+
+.phenotype-cpap-metrics > div[data-primary="true"] {
+  border-top-color: #225ea6;
+  background: #edf4fb;
+}
+
+.phenotype-cpap-metrics > div > span:first-child {
+  display: block;
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.phenotype-cpap-metrics > div > strong {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 23px;
+}
+
+.phenotype-cpap-metrics > div > strong + span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.phenotype-cpap-unavailable {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.phenotype-cpap-unavailable article {
+  padding: 15px 17px;
+  border: 1px dashed #b7bec4;
+  border-radius: 8px;
+  background: #f5f6f4;
+}
+
+.phenotype-cpap-unavailable h3 {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.phenotype-cpap-unavailable p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.phenotype-cpap-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.phenotype-cpap-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.phenotype-cpap-table caption {
+  padding: 12px 15px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: left;
+}
+
+.phenotype-cpap-table th,
+.phenotype-cpap-table td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--rule);
+  text-align: left;
+}
+
+.phenotype-cpap-table thead th {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.phenotype-cpap-table tbody tr[data-selected="true"] {
+  background: #edf4fc;
+  box-shadow: inset 3px 0 #225ea6;
+}
+
+.phenotype-cpap-table tbody tr[data-reference="true"] {
+  border-top: 2px solid #9ca6ad;
+  background: #f4f5f3;
+}
+
+.phenotype-cpap-table tbody th button,
+.phenotype-cpap-table tbody th > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.phenotype-cpap-table tbody th span {
+  min-width: 36px;
+  color: #225ea6;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.phenotype-cpap-table tbody th strong {
+  font-size: 11px;
+}
+
+.phenotype-cpap-table td {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.phenotype-cpap-table td > strong,
+.phenotype-cpap-table td > small,
+.phenotype-cpap-bar > strong,
+.phenotype-cpap-bar > small {
+  position: relative;
+  z-index: 1;
+  display: block;
+}
+
+.phenotype-cpap-table td > small,
+.phenotype-cpap-bar > small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.phenotype-cpap-bar {
+  position: relative;
+  min-width: 112px;
+  padding: 5px 7px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #f1f3f4;
+}
+
+.phenotype-cpap-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(34, 94, 166, 0.16);
+}
+
+.phenotype-cpap-suppressed {
+  display: inline-block;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-style: italic;
+}
+
+.phenotype-cpap-notes {
+  margin-top: 12px;
+  padding: 12px 15px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.phenotype-cpap-notes summary {
+  color: var(--link);
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.phenotype-cpap-notes div {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.phenotype-cpap-notes p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .cluster-matrix-key {
   display: flex;
   justify-content: flex-end;
@@ -3709,6 +4012,10 @@ code,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .phenotype-cpap-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .phenotype-panel-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3819,7 +4126,9 @@ code,
   }
 
   .phenotype-metric-grid,
-  .phenotype-panel-stats {
+  .phenotype-panel-stats,
+  .phenotype-cpap-metrics,
+  .phenotype-cpap-unavailable {
     grid-template-columns: 1fr;
   }
 

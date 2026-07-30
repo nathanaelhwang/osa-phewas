@@ -15,6 +15,7 @@ const profileData: PhenotypeProfileDataset = {
   construction: phenotypeData.construction,
   octants: phenotypeData.octants,
   cluster_profiles: phenotypeData.cluster_profiles,
+  cpap_treatment: phenotypeData.cpap_treatment,
   signature_figure: phenotypeData.signature_figure,
   caveats: phenotypeData.caveats,
 };
