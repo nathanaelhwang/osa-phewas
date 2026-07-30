@@ -191,11 +191,15 @@ test("server-renders the landmark CPAP state with immortal-time and confounding 
   assertNoStarterPreview(html);
 });
 
-test("server-renders the enriched octant phenotype and survival explorers", async () => {
+test("server-renders the enriched octant profile subpage", async () => {
   const html = await render("/phenotypes");
   const text = visibleText(html);
 
   assert.match(html, /<title>Octant phenotypes · OSA Association Atlas<\/title>/i);
+  assert.match(html, /<a(?=[^>]*href=["']\/phenotypes["'])(?=[^>]*aria-current=["']page["'])[^>]*>/i);
+  assert.match(html, /href=["']\/phenotypes\/outcomes["']/i);
+  assert.match(text, /Profiles & clusters/i);
+  assert.match(text, /Outcome panels 168/i);
   assert.match(text, /Three near-independent axes\. Eight octant phenotypes\./i);
   assert.match(text, /70,880 people/i);
   assert.match(text, /Physiologic severity/i);
@@ -213,6 +217,22 @@ test("server-renders the enriched octant phenotype and survival explorers", asyn
   assert.match(text, /Compare all eight phenotypes in native units/i);
   assert.match(text, /containing cohort/i);
   assert.match(text, /Pairwise Spearman correlations/i);
+  assert.match(text, /Continue to the incident-outcome panels/i);
+  assert.doesNotMatch(text, /Look up any gated phenotype–outcome panel/i);
+  assert.doesNotMatch(text, /Loading interactive curve/i);
+  assert.match(html, /\/images\/phenotypes\/octant-construction\.png/i);
+  assertNoStarterPreview(html);
+});
+
+test("server-renders the dedicated phenotype outcome subpage", async () => {
+  const html = await render("/phenotypes/outcomes");
+  const text = visibleText(html);
+
+  assert.match(html, /<title>Phenotype outcome panels · OSA Association Atlas<\/title>/i);
+  assert.match(html, /<a(?=[^>]*href=["']\/phenotypes\/outcomes["'])(?=[^>]*aria-current=["']page["'])[^>]*>/i);
+  assert.match(text, /Outcome panels without the long scroll\./i);
+  assert.match(text, /Panels 168 one-vs-rest M4 models/i);
+  assert.match(text, /Interactive curves 152 16 disclosure-withheld/i);
   assert.match(text, /Octant-exposure Incidence PheDAS/i);
   assert.match(text, /Look up any gated phenotype–outcome panel/i);
   assert.match(text, /PheCode outcomes · 120/i);
@@ -226,7 +246,6 @@ test("server-renders the enriched octant phenotype and survival explorers", asyn
   assert.match(text, /Thin 3-year tail/i);
   assert.match(text, /PH diagnostic · not evaluated/i);
   assert.match(text, /Loading interactive curve/i);
-  assert.match(html, /\/images\/phenotypes\/octant-construction\.png/i);
   assert.doesNotMatch(text, /Why the full trajectory is still a figure/i);
   assertNoStarterPreview(html);
 });

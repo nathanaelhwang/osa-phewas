@@ -26,7 +26,8 @@ Open `http://localhost:3000`. Key routes are:
 
 - `/` — atlas overview and feature search
 - `/explore` — interactive Manhattan, volcano, and table views
-- `/phenotypes` — enriched octant profiles and interactive phenotype-exposure survival curves
+- `/phenotypes` — enriched octant profiles and cluster comparisons
+- `/phenotypes/outcomes` — searchable phenotype-exposure outcome panels and interactive curves
 - `/survival` — cumulative-incidence curves by OSA severity or landmark CPAP adherence
 - `/was` — estimand-separated laboratory, medication, behavior, procedure, and utilization scans
 - `/feature?code=401.1` — combined disease evidence for a PheCode, or a namespaced non-disease feature report

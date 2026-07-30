@@ -173,6 +173,13 @@ export type PhenotypeDataset = {
   caveats: Array<{ title: string; text: string }>;
 };
 
+export type PhenotypeProfileDataset = Pick<
+  PhenotypeDataset,
+  "construction" | "octants" | "cluster_profiles" | "signature_figure" | "caveats"
+>;
+
+export type PhenotypeOutcomesDataset = Pick<PhenotypeDataset, "octants" | "survival">;
+
 export type PhenotypeCurveSeries = {
   time_years: number[];
   cif_pct: number[];

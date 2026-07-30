@@ -7,11 +7,11 @@ import {
   publicAssetPath,
   type DistributionSummary,
   type OctantPhenotype,
-  type PhenotypeDataset,
   type PhenotypeMetric,
   type PhenotypeMetricDomain,
+  type PhenotypeProfileDataset,
 } from "../phenotype-data";
-import { OctantSurvivalExplorer } from "./OctantSurvivalExplorer";
+import { PhenotypeSubnav } from "./PhenotypeSubnav";
 
 type MetricDomainFilter = "all" | PhenotypeMetricDomain;
 
@@ -141,7 +141,7 @@ function ClusterComparisonTable({
   selectedOctantId,
   onSelectOctant,
 }: {
-  data: PhenotypeDataset;
+  data: PhenotypeProfileDataset;
   metrics: PhenotypeMetric[];
   selectedOctantId: string;
   onSelectOctant: (id: string) => void;
@@ -191,7 +191,7 @@ function ClusterComparisonTable({
   );
 }
 
-function ScoreCorrelationTable({ data }: { data: PhenotypeDataset }) {
+function ScoreCorrelationTable({ data }: { data: PhenotypeProfileDataset }) {
   return (
     <div className="score-correlation">
       <div><span>Score dependence check</span><h3>Pairwise Spearman correlations</h3><p>Values near zero indicate that the three cohort scores capture largely distinct dimensions.</p></div>
@@ -204,7 +204,7 @@ function ScoreCorrelationTable({ data }: { data: PhenotypeDataset }) {
   );
 }
 
-export function PhenotypeExplorer({ data }: { data: PhenotypeDataset }) {
+export function PhenotypeExplorer({ data }: { data: PhenotypeProfileDataset }) {
   const [selectedOctantId, setSelectedOctantId] = useState(data.octants[0]?.id ?? "");
   const [metricDomain, setMetricDomain] = useState<MetricDomainFilter>("all");
   const [metricQuery, setMetricQuery] = useState("");
@@ -221,6 +221,7 @@ export function PhenotypeExplorer({ data }: { data: PhenotypeDataset }) {
   return (
     <main className="phenotype-page page-shell">
       <div className="breadcrumbs"><Link href="/">Atlas</Link><span>/</span><span>Phenotypes</span></div>
+      <PhenotypeSubnav active="profiles" />
 
       <header className="phenotype-hero">
         <div>
@@ -293,14 +294,12 @@ export function PhenotypeExplorer({ data }: { data: PhenotypeDataset }) {
         </details>
       </section>
 
-      <OctantSurvivalExplorer data={data} />
-
       <section className="curve-notes phenotype-caveats" aria-labelledby="phenotype-caveats-title">
         <div><span className="section-kicker">Interpretation guardrails</span><h2 id="phenotype-caveats-title">A research taxonomy—not a clinical diagnostic rule</h2></div>
         <div className="curve-note-grid">{data.caveats.map((caveat) => <article key={caveat.title}><strong>{caveat.title}</strong><p>{caveat.text}</p></article>)}</div>
       </section>
 
-      <div className="phenotype-next"><div><span className="section-kicker">Related evidence</span><h2>Compare with OSA severity and landmark CPAP adherence</h2><p>The phenotype-exposure curves complement—rather than replace—the main Incidence PheDAS severity analysis.</p></div><Link href="/survival?code=401.1&amp;view=cpap&amp;window=180">Open landmark incidence curves →</Link></div>
+      <div className="phenotype-next"><div><span className="section-kicker">Phenotype outcomes</span><h2>Continue to the incident-outcome panels</h2><p>Search all 168 octant–outcome models and open the interactive cumulative-incidence curves on their dedicated page.</p></div><Link href="/phenotypes/outcomes">Open outcome panels →</Link></div>
     </main>
   );
 }

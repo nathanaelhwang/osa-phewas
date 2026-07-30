@@ -7,7 +7,7 @@ import {
   type OctantSurvivalOutcome,
   type OctantSurvivalPanel,
   type PhenotypeCurvePanel,
-  type PhenotypeDataset,
+  type PhenotypeOutcomesDataset,
   type PhenotypeSurvivalOutcomePayload,
 } from "../phenotype-data";
 import { PlotlyChart } from "./PlotlyChart";
@@ -195,7 +195,7 @@ function PanelDetail({
   loading,
   error,
 }: {
-  data: PhenotypeDataset;
+  data: PhenotypeOutcomesDataset;
   level: OctantSurvivalLevel;
   row: ResultRow;
   payload: PhenotypeSurvivalOutcomePayload | null;
@@ -267,7 +267,7 @@ function PanelDetail({
   );
 }
 
-export function OctantSurvivalExplorer({ data }: { data: PhenotypeDataset }) {
+export function OctantSurvivalExplorer({ data }: { data: PhenotypeOutcomesDataset }) {
   const [levelId, setLevelId] = useState<OctantSurvivalLevel["id"]>("phecode");
   const [scope, setScope] = useState<SignificanceScope>("all");
   const [query, setQuery] = useState("");
